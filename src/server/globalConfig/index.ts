@@ -63,7 +63,10 @@ export const getServerGlobalConfig = async () => {
     image: cleanObject({
       defaultImageNum: imageEnv.AI_IMAGE_DEFAULT_IMAGE_NUM,
     }),
-    oAuthSSOProviders: authEnv.NEXT_AUTH_SSO_PROVIDERS.trim().split(/[,，]/),
+    oAuthSSOProviders: authEnv.NEXT_AUTH_SSO_PROVIDERS.trim()
+      .split(/[,，]/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0),
     systemAgent: parseSystemAgent(appEnv.SYSTEM_AGENT),
     telemetry: {
       langfuse: langfuseEnv.ENABLE_LANGFUSE,

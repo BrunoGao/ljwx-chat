@@ -2,28 +2,28 @@
 // if you want to use it in the commercial usage
 // please contact us for more information: hello@lobehub.com
 
-export const LOBE_CHAT_CLOUD = 'LobeHub Cloud';
+export const LOBE_CHAT_CLOUD = '灵境万象云';
 
-export const BRANDING_NAME = 'LobeHub';
+export const BRANDING_NAME = '灵境万象';
 export const BRANDING_LOGO_URL = '';
 
-export const ORG_NAME = 'LobeHub';
+export const ORG_NAME = '灵境万象';
 
 export const BRANDING_URL = {
-  help: undefined,
-  privacy: undefined,
-  terms: undefined,
+  help: '#',
+  privacy: '#',
+  terms: '#',
 };
 
 export const SOCIAL_URL = {
-  discord: 'https://discord.gg/AYFPHvv2jT',
-  github: 'https://github.com/lobehub',
-  medium: 'https://medium.com/@lobehub',
-  x: 'https://x.com/lobehub',
-  youtube: 'https://www.youtube.com/@lobehub',
+  discord: '#',
+  github: '#',
+  medium: '#',
+  x: '#',
+  youtube: '#',
 };
 
 export const BRANDING_EMAIL = {
-  business: 'hello@lobehub.com',
-  support: 'support@lobehub.com',
+  business: 'support@example.com',
+  support: 'support@example.com',
 };

@@ -101,10 +101,20 @@ export class LobeOllamaAI implements LobeRuntimeAI {
         });
       }
 
+      // Safely convert error message, handling Symbol types
+      const errorMessage = (() => {
+        try {
+          const msg = e.error?.message || e.message;
+          return typeof msg === 'symbol' ? msg.toString() : String(msg);
+        } catch {
+          return 'Unknown error';
+        }
+      })();
+
       throw AgentRuntimeError.chat({
         error: {
           ...(typeof e.error !== 'string' ? e.error : undefined),
-          message: String(e.error?.message || e.message),
+          message: errorMessage,
           name: e.name,
           status_code: e.status_code,
         },

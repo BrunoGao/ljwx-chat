@@ -1,7 +1,7 @@
 {
-  "name": "@lobehub/lobehub",
+  "name": "@lingjingwanxiang/lingjingwanxiang",
   "version": "2.0.0-next.112",
-  "description": "LobeHub - an open-source,comprehensive AI Agent framework that supports speech synthesis, multimodal, and extensible Function Call plugin system. Supports one-click free deployment of your private ChatGPT/LLM web application.",
+  "description": "灵境万象 - 基于开源AI助手框架的定制化版本，支持本地Ollama模型和知识库功能。",
   "keywords": [
     "framework",
     "chatbot",
@@ -23,7 +23,7 @@
     "url": "https://github.com/lobehub/lobe-chat.git"
   },
   "license": "MIT",
-  "author": "LobeHub <i@lobehub.com>",
+  "author": "灵境万象",
   "sideEffects": false,
   "workspaces": [
     "packages/*",
@@ -50,7 +50,7 @@
     "desktop:build-local": "npm run desktop:build-next && npm run desktop:prepare-dist && npm run build-local --prefix=./apps/desktop",
     "desktop:build-next": "npm run build:electron",
     "desktop:prepare-dist": "tsx scripts/electronWorkflow/moveNextStandalone.ts",
-    "dev": "next dev -p 3010",
+    "dev": "next dev -p 3210",
     "dev:desktop": "next dev -p 3015",
     "dev:mobile": "next dev -p 3018",
     "docs:i18n": "lobe-i18n md && npm run lint:md && npm run lint:mdx && prettier -c --write locales/**/*",

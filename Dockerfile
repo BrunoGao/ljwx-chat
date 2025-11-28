@@ -52,7 +52,7 @@ ARG FEATURE_FLAGS
 ENV NEXT_PUBLIC_BASE_PATH="${NEXT_PUBLIC_BASE_PATH}" \
     FEATURE_FLAGS="${FEATURE_FLAGS}"
 
-ENV NEXT_PUBLIC_ENABLE_NEXT_AUTH="${NEXT_PUBLIC_ENABLE_NEXT_AUTH:-1}" \
+ENV NEXT_PUBLIC_ENABLE_NEXT_AUTH="${NEXT_PUBLIC_ENABLE_NEXT_AUTH:-0}" \
     NEXT_PUBLIC_ENABLE_CLERK_AUTH="${NEXT_PUBLIC_ENABLE_CLERK_AUTH:-0}" \
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}" \
     CLERK_WEBHOOK_SECRET="whsec_xxx" \
@@ -111,7 +111,8 @@ RUN \
 COPY . .
 
 # run build standalone for docker version
-RUN npm run build:docker
+# Skip lint in Docker (already validated locally) to save build time and avoid timeout
+RUN pnpm exec tsx scripts/prebuild.mts && pnpm exec cross-env NODE_OPTIONS=--max-old-space-size=6144 DOCKER=true next build --webpack && npm run build-sitemap
 
 ## Application image, copy all the files for production
 FROM busybox:latest AS app

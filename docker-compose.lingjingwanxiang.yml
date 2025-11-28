@@ -1,0 +1,55 @@
+name: lingjingwanxiang
+
+services:
+  lingjingwanxiang:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lingjingwanxiang:latest
+    container_name: lingjingwanxiang
+    ports:
+      - '3210:3210'
+    environment:
+      # ============ Application Settings ============
+      - NODE_ENV=production
+      - APP_URL=http://192.168.1.83:3210
+
+      # ============ Database Configuration ============
+      # Connect to host PostgreSQL (Mac uses host.docker.internal)
+      - DATABASE_URL=postgresql://brunogao@host.docker.internal:5432/lingjingwanxiang
+      - DATABASE_DRIVER=node
+      - KEY_VAULTS_SECRET=${KEY_VAULTS_SECRET}
+
+      # ============ S3/MinIO Configuration ============
+      # Connect to host MinIO
+      - S3_ENDPOINT=http://host.docker.internal:9002
+      - S3_BUCKET=lingjingwanxiang
+      - S3_PUBLIC_DOMAIN=http://192.168.1.83:9002
+      - S3_ACCESS_KEY_ID=minioadmin
+      - S3_SECRET_ACCESS_KEY=minioadmin
+      - S3_ENABLE_PATH_STYLE=1
+      - S3_SET_ACL=0
+
+      # ============ Ollama Configuration ============
+      # Connect to host Ollama
+      - ENABLED_OLLAMA=1
+      - OLLAMA_PROXY_URL=http://host.docker.internal:11434
+
+      # ============ Authentication (Development) ============
+      - NEXT_PUBLIC_ENABLE_NEXT_AUTH=0
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXT_AUTH_SECRET=${NEXT_AUTH_SECRET}
+      - NEXTAUTH_URL=http://192.168.1.83:3210
+
+    env_file:
+      - .env.docker
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3210/api/healthcheck', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    extra_hosts:
+      # This allows the container to connect to services running on the host
+      - "host.docker.internal:host-gateway"

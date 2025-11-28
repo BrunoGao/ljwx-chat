@@ -27,6 +27,8 @@ const DEFAULT_S3_REGION = 'us-east-1';
 export class S3 {
   private readonly client: S3Client;
 
+  private readonly presignClient: S3Client;
+
   private readonly bucket: string;
 
   private readonly setAcl: boolean;
@@ -38,17 +40,29 @@ export class S3 {
     this.bucket = fileEnv.S3_BUCKET;
     this.setAcl = fileEnv.S3_SET_ACL;
 
-    this.client = new S3Client({
+    const clientConfig = {
       credentials: {
         accessKeyId: fileEnv.S3_ACCESS_KEY_ID,
         secretAccessKey: fileEnv.S3_SECRET_ACCESS_KEY,
       },
-      endpoint: fileEnv.S3_ENDPOINT,
       forcePathStyle: fileEnv.S3_ENABLE_PATH_STYLE,
       region: fileEnv.S3_REGION || DEFAULT_S3_REGION,
       // refs: https://github.com/lobehub/lobe-chat/pull/5479
-      requestChecksumCalculation: 'WHEN_REQUIRED',
-      responseChecksumValidation: 'WHEN_REQUIRED',
+      requestChecksumCalculation: 'WHEN_REQUIRED' as const,
+      responseChecksumValidation: 'WHEN_REQUIRED' as const,
+    };
+
+    // Client for internal operations (upload, download, delete)
+    this.client = new S3Client({
+      ...clientConfig,
+      endpoint: fileEnv.S3_ENDPOINT,
+    });
+
+    // Client for generating presigned URLs (uses public domain if configured)
+    // This ensures presigned URLs use the browser-accessible endpoint
+    this.presignClient = new S3Client({
+      ...clientConfig,
+      endpoint: fileEnv.S3_PUBLIC_DOMAIN || fileEnv.S3_ENDPOINT,
     });
   }
 
@@ -107,7 +121,9 @@ export class S3 {
       Key: key,
     });
 
-    return getSignedUrl(this.client, command, { expiresIn: 3600 });
+    // Use presignClient which has the public domain endpoint
+    // This ensures the presigned URL uses browser-accessible address
+    return getSignedUrl(this.presignClient, command, { expiresIn: 3600 });
   }
 
   public async createPreSignedUrlForPreview(key: string, expiresIn?: number): Promise<string> {
@@ -116,7 +132,8 @@ export class S3 {
       Key: key,
     });
 
-    return getSignedUrl(this.client, command, {
+    // Use presignClient for preview URLs as well
+    return getSignedUrl(this.presignClient, command, {
       expiresIn: expiresIn ?? fileEnv.S3_PREVIEW_URL_EXPIRE_IN,
     });
   }
