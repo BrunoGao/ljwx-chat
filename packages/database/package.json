@@ -17,9 +17,13 @@
     "@lobechat/const": "workspace:*",
     "@lobechat/types": "workspace:*",
     "@lobechat/utils": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "random-words": "^2.0.1",
     "ts-md5": "^2.0.1",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0"
   },
   "peerDependencies": {
     "@electric-sql/pglite": "^0.2.17",

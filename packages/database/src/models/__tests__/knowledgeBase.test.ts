@@ -2,7 +2,7 @@
 import { and, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { LobeChatDatabase } from '../../type';import { sleep } from '@/utils/sleep';
+import { sleep } from '@/utils/sleep';
 
 import {
   NewKnowledgeBase,
@@ -12,8 +12,11 @@ import {
   knowledgeBases,
   users,
 } from '../../schemas';
+import { LobeChatDatabase } from '../../type';
 import { KnowledgeBaseModel } from '../knowledgeBase';
 import { getTestDB } from './_util';
+
+import { sleep } from '@/utils/sleep';
 
 const serverDB: LobeChatDatabase = await getTestDB();
 
@@ -227,6 +230,76 @@ describe('KnowledgeBaseModel', () => {
       });
       expect(remainingFiles).toHaveLength(1);
       expect(remainingFiles[0].fileId).toBe('file2');
+    });
+
+    it('should only remove files that belong to the current user', async () => {
+      // Create files for user1
+      await serverDB.insert(globalFiles).values([
+        {
+          hashId: 'hash1',
+          url: 'https://example.com/document.pdf',
+          size: 1000,
+          fileType: 'application/pdf',
+          creator: userId,
+        },
+      ]);
+
+      await serverDB.insert(files).values([
+        {
+          id: 'file1',
+          name: 'document.pdf',
+          url: 'https://example.com/document.pdf',
+          fileHash: 'hash1',
+          size: 1000,
+          fileType: 'application/pdf',
+          userId,
+        },
+      ]);
+
+      // Create files for user2
+      await serverDB.insert(globalFiles).values([
+        {
+          hashId: 'hash3',
+          url: 'https://example.com/user2-doc.pdf',
+          size: 2000,
+          fileType: 'application/pdf',
+          creator: 'user2',
+        },
+      ]);
+
+      await serverDB.insert(files).values([
+        {
+          id: 'file3',
+          name: 'user2-doc.pdf',
+          url: 'https://example.com/user2-doc.pdf',
+          fileHash: 'hash3',
+          size: 2000,
+          fileType: 'application/pdf',
+          userId: 'user2',
+        },
+      ]);
+
+      // user1 creates a knowledge base
+      const { id: knowledgeBaseId } = await knowledgeBaseModel.create({ name: 'User1 KB' });
+      await knowledgeBaseModel.addFilesToKnowledgeBase(knowledgeBaseId, ['file1']);
+
+      // user2 creates a knowledge base with their file
+      const user2KnowledgeBaseModel = new KnowledgeBaseModel(serverDB, 'user2');
+      const { id: user2KnowledgeBaseId } = await user2KnowledgeBaseModel.create({
+        name: 'User2 KB',
+      });
+      await user2KnowledgeBaseModel.addFilesToKnowledgeBase(user2KnowledgeBaseId, ['file3']);
+
+      // user1 tries to remove files from user2's knowledge base
+      // This should NOT remove user2's files due to userId check
+      await knowledgeBaseModel.removeFilesFromKnowledgeBase(user2KnowledgeBaseId, ['file3']);
+
+      // Verify that user2's files are still in their knowledge base
+      const user2Files = await serverDB.query.knowledgeBaseFiles.findMany({
+        where: eq(knowledgeBaseFiles.knowledgeBaseId, user2KnowledgeBaseId),
+      });
+      expect(user2Files).toHaveLength(1);
+      expect(user2Files[0].fileId).toBe('file3');
     });
   });
 

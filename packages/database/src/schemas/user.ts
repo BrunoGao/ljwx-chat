@@ -1,34 +1,44 @@
 /* eslint-disable sort-keys-fix/sort-keys-fix  */
 import type { CustomPluginParams } from '@lobechat/types';
 import { LobeChatPluginManifest } from '@lobehub/chat-plugin-sdk';
-import { boolean, jsonb, pgTable, primaryKey, text } from 'drizzle-orm/pg-core';
+import { boolean, index, jsonb, pgTable, primaryKey, text } from 'drizzle-orm/pg-core';
 
 import { DEFAULT_PREFERENCE } from '@/const/user';
 
 import { timestamps, timestamptz } from './_helpers';
 
-export const users = pgTable('users', {
-  id: text('id').primaryKey().notNull(),
-  username: text('username').unique(),
-  email: text('email'),
+export const users = pgTable(
+  'users',
+  {
+    id: text('id').primaryKey().notNull(),
+    username: text('username').unique(),
+    email: text('email'),
 
-  avatar: text('avatar'),
-  phone: text('phone'),
-  firstName: text('first_name'),
-  lastName: text('last_name'),
-  fullName: text('full_name'),
+    avatar: text('avatar'),
+    phone: text('phone'),
+    firstName: text('first_name'),
+    lastName: text('last_name'),
+    fullName: text('full_name'),
 
-  isOnboarded: boolean('is_onboarded').default(false),
-  // Time user was created in Clerk
-  clerkCreatedAt: timestamptz('clerk_created_at'),
+    isOnboarded: boolean('is_onboarded').default(false),
+    // Time user was created in Clerk
+    clerkCreatedAt: timestamptz('clerk_created_at'),
 
-  // Required by nextauth, all null allowed
-  emailVerifiedAt: timestamptz('email_verified_at'),
+    // Required by nextauth, all null allowed
+    emailVerifiedAt: timestamptz('email_verified_at'),
 
-  preference: jsonb('preference').$defaultFn(() => DEFAULT_PREFERENCE),
+    // Local authentication - password hash stored using bcrypt/argon2
+    passwordHash: text('password_hash'),
 
-  ...timestamps,
-});
+    preference: jsonb('preference').$defaultFn(() => DEFAULT_PREFERENCE),
+
+    ...timestamps,
+  },
+  (table) => ({
+    // Index for email lookups during local auth
+    emailIdx: index('users_email_idx').on(table.email),
+  }),
+);
 
 export type NewUser = typeof users.$inferInsert;
 export type UserItem = typeof users.$inferSelect;
@@ -72,3 +82,47 @@ export const userInstalledPlugins = pgTable(
 
 export type NewInstalledPlugin = typeof userInstalledPlugins.$inferInsert;
 export type InstalledPluginItem = typeof userInstalledPlugins.$inferSelect;
+
+// Password reset tokens - for "forgot password" flow
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    id: text('id').primaryKey().notNull(),
+    userId: text('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    token: text('token').notNull().unique(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    userIdIdx: index('password_reset_tokens_user_id_idx').on(table.userId),
+    tokenIdx: index('password_reset_tokens_token_idx').on(table.token),
+  }),
+);
+
+export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+export type PasswordResetTokenItem = typeof passwordResetTokens.$inferSelect;
+
+// Email verification tokens - for local email registration
+export const emailVerificationTokens = pgTable(
+  'email_verification_tokens',
+  {
+    id: text('id').primaryKey().notNull(),
+    userId: text('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    email: text('email').notNull(),
+    token: text('token').notNull().unique(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    userIdIdx: index('email_verification_tokens_user_id_idx').on(table.userId),
+    tokenIdx: index('email_verification_tokens_token_idx').on(table.token),
+    emailIdx: index('email_verification_tokens_email_idx').on(table.email),
+  }),
+);
+
+export type NewEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
+export type EmailVerificationTokenItem = typeof emailVerificationTokens.$inferSelect;
