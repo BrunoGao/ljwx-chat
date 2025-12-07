@@ -6,6 +6,18 @@ const ollamaChatModels: AIChatModelCard[] = [
       functionCall: true,
       reasoning: true,
     },
+    contextWindowTokens: 262_144,
+    description:
+      '灵境万象（Lingjingwanxiang）32B：基于 Qwen3-Coder 30B 的定制模型，专为代码开发和技术咨询优化，提供准确、清晰的专业回答。',
+    displayName: '灵境万象 32B',
+    id: 'lingjingwanxiang:32b',
+    type: 'chat',
+  },
+  {
+    abilities: {
+      functionCall: true,
+      reasoning: true,
+    },
     contextWindowTokens: 163_840,
     description:
       'DeepSeek V3.1：下一代推理模型，提升了复杂推理与链路思考能力，适合需要深入分析的任务。',
@@ -44,8 +56,7 @@ const ollamaChatModels: AIChatModelCard[] = [
       functionCall: true,
     },
     contextWindowTokens: 262_144,
-    description:
-      '阿里巴巴针对代理和编码任务的高性能长上下文模型。',
+    description: '阿里巴巴针对代理和编码任务的高性能长上下文模型。',
     displayName: 'Qwen3 Coder 480B',
     id: 'qwen3-coder:480b',
     type: 'chat',
