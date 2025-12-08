@@ -13,7 +13,7 @@ export const DEFAULT_LLM_CONFIG = genUserLLMConfig({
   },
 });
 
-export const DEFAULT_MODEL = 'lingjingwanxiang:32b';
+export const DEFAULT_MODEL = 'qwen3-coder:30b';
 
 export const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 export const DEFAULT_EMBEDDING_PROVIDER = 'openai';
