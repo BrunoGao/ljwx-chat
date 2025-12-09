@@ -5,7 +5,7 @@
 export const LOBE_CHAT_CLOUD = '灵境万象云';
 
 export const BRANDING_NAME = '灵境万象';
-export const BRANDING_LOGO_URL = '';
+export const BRANDING_LOGO_URL = '/logo.png';
 
 export const ORG_NAME = '灵境万象';
 
