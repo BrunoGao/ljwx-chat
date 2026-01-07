@@ -43,6 +43,11 @@ tmp/
 venv/
 .venv/
 
+# Kubernetes secrets (DO NOT COMMIT)
+k8s/.env.k8s
+k8s/secret.yaml
+k8s/*.secret.yaml
+
 # Dependencies
 node_modules/
 *.lock

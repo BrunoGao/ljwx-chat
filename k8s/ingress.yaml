@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lobechat-ingress
+  namespace: chat
+  annotations:
+    # Nginx ingress controller annotations
+    kubernetes.io/ingress.class: nginx
+
+    # TLS is handled by external nginx (85.239.233.16)
+    # So we don't redirect to HTTPS at ingress level
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+    # Trust X-Forwarded-* headers from external nginx
+    nginx.ingress.kubernetes.io/use-forwarded-headers: "true"
+
+    # Preserve client IP and protocol from external nginx
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Real-IP $remote_addr;
+
+    # Proxy settings
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/websocket-services: "lobechat-service"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$http_x_forwarded_for"
+
+    # Rate limiting (optional)
+    # nginx.ingress.kubernetes.io/limit-rps: "100"
+
+spec:
+  # No TLS configuration needed - handled by external nginx
+  rules:
+  - host: chat.omniverseai.net
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lobechat-service
+            port:
+              number: 80

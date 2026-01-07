@@ -21,6 +21,7 @@ import { groupRouter } from './group';
 import { imageRouter } from './image';
 import { importerRouter } from './importer';
 import { knowledgeBaseRouter } from './knowledgeBase';
+import { localAuthRouter } from './localAuth';
 import { marketRouter } from './market';
 import { messageRouter } from './message';
 import { pluginRouter } from './plugin';
@@ -53,6 +54,7 @@ export const lambdaRouter = router({
   image: imageRouter,
   importer: importerRouter,
   knowledgeBase: knowledgeBaseRouter,
+  localAuth: localAuthRouter,
   market: marketRouter,
   message: messageRouter,
   plugin: pluginRouter,

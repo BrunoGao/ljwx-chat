@@ -47,6 +47,11 @@ export const getAuthConfig = () => {
       NEXT_PUBLIC_ENABLE_CLERK_AUTH: z.boolean().optional(),
 
       NEXT_PUBLIC_ENABLE_NEXT_AUTH: z.boolean().optional(),
+
+      /**
+       * Whether to enable local authentication (username/email + password)
+       */
+      NEXT_PUBLIC_ENABLE_LOCAL_AUTH: z.boolean().optional(),
     },
     server: {
       // Clerk
@@ -79,6 +84,7 @@ export const getAuthConfig = () => {
 
       // Next Auth
       NEXT_PUBLIC_ENABLE_NEXT_AUTH: process.env.NEXT_PUBLIC_ENABLE_NEXT_AUTH === '1',
+      NEXT_PUBLIC_ENABLE_LOCAL_AUTH: process.env.NEXT_PUBLIC_ENABLE_LOCAL_AUTH === '1',
       NEXT_AUTH_SSO_PROVIDERS: process.env.NEXT_AUTH_SSO_PROVIDERS,
       NEXT_AUTH_SECRET: process.env.NEXT_AUTH_SECRET,
       NEXT_AUTH_DEBUG: !!process.env.NEXT_AUTH_DEBUG,

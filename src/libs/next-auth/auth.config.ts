@@ -3,6 +3,7 @@ import type { NextAuthConfig } from 'next-auth';
 import { getAuthConfig } from '@/envs/auth';
 
 import { LobeNextAuthDbAdapter } from './adapter';
+import { credentialsProvider } from './providers/credentials';
 import { ssoProviders } from './sso-providers';
 
 const {
@@ -10,6 +11,7 @@ const {
   NEXT_AUTH_SECRET,
   NEXT_AUTH_SSO_SESSION_STRATEGY,
   NEXT_AUTH_SSO_PROVIDERS,
+  NEXT_PUBLIC_ENABLE_LOCAL_AUTH,
   NEXT_PUBLIC_ENABLE_NEXT_AUTH,
 } = getAuthConfig();
 
@@ -28,6 +30,20 @@ export const initSSOProviders = () => {
     : [];
 };
 
+export const initAuthProviders = () => {
+  const providers = [];
+
+  // Add SSO providers
+  providers.push(...initSSOProviders());
+
+  // Add credentials provider if local auth is enabled
+  if (NEXT_PUBLIC_ENABLE_LOCAL_AUTH) {
+    providers.push(credentialsProvider);
+  }
+
+  return providers;
+};
+
 // Notice this is only an object, not a full Auth.js instance
 export default {
   adapter: NEXT_PUBLIC_ENABLE_NEXT_AUTH ? LobeNextAuthDbAdapter() : undefined,
@@ -39,6 +55,50 @@ export default {
         token.userId = user?.id;
       }
       return token;
+    },
+    async redirect(params) {
+      const { url, baseUrl } = params;
+
+      console.log('[NextAuth] redirect callback:', { baseUrl, url });
+
+      // If url is relative, use baseUrl
+      if (url.startsWith('/')) {
+        const redirectUrl = `${baseUrl}${url}`;
+        console.log('[NextAuth] Relative URL, redirecting to:', redirectUrl);
+        return redirectUrl;
+      }
+
+      // Parse the URL to check if it's safe to redirect
+      try {
+        const urlObj = new URL(url);
+        const baseUrlObj = new URL(baseUrl);
+
+        // Allow redirect if:
+        // 1. Same port (e.g., both on 3210)
+        // 2. Both are localhost/127.0.0.1 or both are same network
+        const isSamePort = urlObj.port === baseUrlObj.port;
+        const isLocalhost =
+          (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') &&
+          (baseUrlObj.hostname === 'localhost' || baseUrlObj.hostname === '127.0.0.1');
+        const isSameHost = urlObj.hostname === baseUrlObj.hostname;
+
+        if (isSamePort && (isSameHost || isLocalhost)) {
+          console.log('[NextAuth] Safe redirect, returning url:', url);
+          return url;
+        }
+
+        // If ports match but hosts differ (localhost vs IP), trust the URL
+        if (isSamePort) {
+          console.log('[NextAuth] Same port, trusting url:', url);
+          return url;
+        }
+      } catch (e) {
+        console.error('[NextAuth] Error parsing URL:', e);
+      }
+
+      // Default to baseUrl for external URLs
+      console.log('[NextAuth] External URL, returning baseUrl:', baseUrl);
+      return baseUrl;
     },
     async session({ session, token, user }) {
       if (session.user) {
@@ -57,7 +117,7 @@ export default {
     error: '/next-auth/error',
     signIn: '/next-auth/signin',
   },
-  providers: initSSOProviders(),
+  providers: initAuthProviders(),
   secret: NEXT_AUTH_SECRET ?? process.env.AUTH_SECRET,
   session: {
     // Force use JWT if server service is disabled

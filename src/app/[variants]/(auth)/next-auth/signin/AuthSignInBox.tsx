@@ -3,16 +3,18 @@
 import { BRANDING_NAME, DOCUMENTS_REFER_URL, PRIVACY_URL, TERMS_URL } from '@lobechat/const';
 import { Button, Text } from '@lobehub/ui';
 import { LobeHub } from '@lobehub/ui/brand';
-import { Col, Flex, Row, Skeleton } from 'antd';
+import { Col, Divider, Flex, Form, Input, Row, Skeleton } from 'antd';
 import { createStyles } from 'antd-style';
 import { AuthError } from 'next-auth';
 import { signIn } from 'next-auth/react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import BrandWatermark from '@/components/BrandWatermark';
 import AuthIcons from '@/components/NextAuth/AuthIcons';
+import { authEnv } from '@/envs/auth';
 import { useUserStore } from '@/store/user';
 
 const useStyles = createStyles(({ css, token }) => ({
@@ -66,13 +68,21 @@ const BtnListLoading = memo(() => {
  * but using client components.
  * ref: https://authjs.dev/guides/pages/signin
  */
+interface LocalAuthFormValues {
+  identifier: string;
+  password: string;
+}
+
 export default memo(() => {
   const { styles } = useStyles();
   const { t } = useTranslation('clerk');
   const router = useRouter();
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
+  const [localAuthLoading, setLocalAuthLoading] = useState(false);
+  const [form] = Form.useForm<LocalAuthFormValues>();
 
   const oAuthSSOProviders = useUserStore((s) => s.oAuthSSOProviders);
+  const enableLocalAuth = authEnv.NEXT_PUBLIC_ENABLE_LOCAL_AUTH;
 
   const searchParams = useSearchParams();
 
@@ -95,6 +105,28 @@ export default memo(() => {
       // Otherwise if a redirects happens Next.js can handle it
       // so you can just re-thrown the error and let Next.js handle it.
       // Docs: https://nextjs.org/docs/app/api-reference/functions/redirect#server-component
+      throw error;
+    }
+  };
+
+  const handleLocalAuthSignIn = async (values: LocalAuthFormValues) => {
+    setLocalAuthLoading(true);
+    try {
+      // Use window.location.origin to ensure correct host in redirect
+      const fullCallbackUrl = callbackUrl.startsWith('/')
+        ? `${window.location.origin}${callbackUrl}`
+        : callbackUrl;
+
+      await signIn('credentials', {
+        identifier: values.identifier,
+        password: values.password,
+        redirectTo: fullCallbackUrl,
+      });
+    } catch (error) {
+      setLocalAuthLoading(false);
+      if (error instanceof AuthError) {
+        return router.push(`/next-auth/?error=${error.type}`);
+      }
       throw error;
     }
   };
@@ -124,6 +156,53 @@ export default memo(() => {
           </div>
           {/* Content */}
           <Flex gap="small" vertical>
+            {/* Local Authentication Form */}
+            {enableLocalAuth && (
+              <>
+                <Form form={form} onFinish={handleLocalAuthSignIn}>
+                  <Form.Item
+                    name="identifier"
+                    rules={[{ message: 'Please enter your email or username', required: true }]}
+                  >
+                    <Input placeholder="Email or Username" size="large" />
+                  </Form.Item>
+                  <Form.Item
+                    name="password"
+                    rules={[{ message: 'Please enter your password', required: true }]}
+                  >
+                    <Input.Password placeholder="Password" size="large" />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button
+                      block
+                      htmlType="submit"
+                      loading={localAuthLoading}
+                      size="large"
+                      type="primary"
+                    >
+                      Sign In
+                    </Button>
+                  </Form.Item>
+                </Form>
+                <Flex justify="space-between">
+                  <Link href="/next-auth/signup">
+                    <Button size="small" type="link">
+                      Create Account
+                    </Button>
+                  </Link>
+                  <Link href="/next-auth/forgot-password">
+                    <Button size="small" type="link">
+                      Forgot Password?
+                    </Button>
+                  </Link>
+                </Flex>
+                {oAuthSSOProviders && oAuthSSOProviders.length > 0 && (
+                  <Divider plain>Or continue with</Divider>
+                )}
+              </>
+            )}
+
+            {/* OAuth SSO Providers */}
             {oAuthSSOProviders ? (
               oAuthSSOProviders.map((provider) => (
                 <Button
@@ -136,9 +215,9 @@ export default memo(() => {
                   {provider}
                 </Button>
               ))
-            ) : (
+            ) : !enableLocalAuth ? (
               <BtnListLoading />
-            )}
+            ) : null}
           </Flex>
         </Flex>
       </div>

@@ -222,6 +222,24 @@ export class UserModel {
     return db.query.users.findFirst({ where: eq(users.email, email) });
   };
 
+  static findByUsername = async (db: LobeChatDatabase, username: string) => {
+    return db.query.users.findFirst({ where: eq(users.username, username) });
+  };
+
+  static updatePassword = async (db: LobeChatDatabase, userId: string, passwordHash: string) => {
+    return db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  };
+
+  static verifyEmail = async (db: LobeChatDatabase, userId: string, email: string) => {
+    return db
+      .update(users)
+      .set({ email, emailVerifiedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  };
+
   static getUserApiKeys = async (
     db: LobeChatDatabase,
     id: string,

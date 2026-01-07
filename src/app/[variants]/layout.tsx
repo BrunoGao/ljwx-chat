@@ -37,7 +37,7 @@ const RootLayout = async ({ children, params }: RootLayoutProps) => {
           <script crossOrigin="anonymous" src="https://unpkg.com/react-scan/dist/auto.global.js" />
         )}
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <NuqsAdapter>
           <GlobalProvider
             appearance={theme}
@@ -47,9 +47,7 @@ const RootLayout = async ({ children, params }: RootLayoutProps) => {
             primaryColor={primaryColor}
             variants={variants}
           >
-            <AuthProvider>
-              {children}
-            </AuthProvider>
+            <AuthProvider>{children}</AuthProvider>
             <PWAInstall />
           </GlobalProvider>
         </NuqsAdapter>

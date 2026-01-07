@@ -1,13 +1,11 @@
-
 import Client from './Client';
 
-
-const MobileProfileUsagePage = async () => {
+const MobileProfileUsagePage = () => {
   return <Client mobile={true} />;
 };
 
-const DesktopProfileUsagePage = async () => {
+const DesktopProfileUsagePage = () => {
   return <Client mobile={false} />;
 };
 
-export { DesktopProfileUsagePage,MobileProfileUsagePage };
+export { DesktopProfileUsagePage, MobileProfileUsagePage };

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lobechat-service
+  namespace: chat
+  labels:
+    app: lobechat
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3210
+    protocol: TCP
+    name: http
+  selector:
+    app: lobechat
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800

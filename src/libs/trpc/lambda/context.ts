@@ -165,16 +165,20 @@ export const createLambdaContext = async (request: NextRequest): Promise<LambdaC
 
   if (enableNextAuth) {
     log('Attempting NextAuth authentication');
+    console.log('[Context] NextAuth enabled, attempting authentication');
     try {
       const { default: NextAuth } = await import('@/libs/next-auth');
 
       const session = await NextAuth.auth();
+      console.log('[Context] NextAuth session:', session);
       if (session && session?.user?.id) {
         auth = session.user;
         userId = session.user.id;
         log('NextAuth authentication successful, userId: %s', userId);
+        console.log('[Context] NextAuth authentication successful, userId:', userId);
       } else {
         log('NextAuth authentication failed, no valid session');
+        console.log('[Context] NextAuth authentication failed, no valid session');
       }
       return createContextInner({
         nextAuth: auth,
@@ -183,7 +187,7 @@ export const createLambdaContext = async (request: NextRequest): Promise<LambdaC
       });
     } catch (e) {
       log('NextAuth authentication error: %O', e);
-      console.error('next auth err', e);
+      console.error('[Context] next auth err', e);
     }
   }
 

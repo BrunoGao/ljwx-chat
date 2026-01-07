@@ -1,0 +1,4 @@
+# K8s deployment files - DO NOT COMMIT SECRETS
+.env.k8s
+secret.yaml
+*.secret.yaml

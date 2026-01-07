@@ -1,0 +1,35 @@
+# Ingress Controller NodePort Service Configuration
+# This exposes the ingress controller on port 31080 to work with external nginx
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+    nodePort: 31080
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+    nodePort: 31443
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+
+---
+# Note: If you already have ingress-nginx installed, you may need to:
+# 1. Check the existing service name and namespace
+# 2. Update the existing service instead of creating a new one
+#
+# To update existing service:
+# kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec":{"type":"NodePort","ports":[{"port":80,"targetPort":80,"protocol":"TCP","nodePort":31080,"name":"http"},{"port":443,"targetPort":443,"protocol":"TCP","nodePort":31443,"name":"https"}]}}'

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chat
+  labels:
+    name: chat
+    app: lobechat
