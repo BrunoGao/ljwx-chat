@@ -89,6 +89,7 @@ One-click **FREE** deployment of your private OpenAI ChatGPT/Claude/Gemini/Groq/
 - [🧩 Plugins](#-plugins)
 - [⌨️ Local Development](#️-local-development)
   - [Environment Setup](#environment-setup)
+  - [Production Deployment](#production-deployment)
 - [🤝 Contributing](#-contributing)
 - [❤️ Sponsor](#️-sponsor)
 - [🔗 More Products](#-more-products)
@@ -747,6 +748,76 @@ S3_SET_ACL=0
 # Ollama (use your LAN IP for remote access)
 OLLAMA_PROXY_URL=http://192.168.1.x:11434
 ENABLED_OLLAMA=1
+```
+
+### Production Deployment
+
+For production deployment, build and start the optimized version:
+
+#### Build for Production
+
+```bash
+# Build the application
+pnpm build
+
+# This will:
+# - Run linting and type checking
+# - Create optimized production bundles
+# - Generate static pages
+# - Run database migrations
+```
+
+#### Start Production Server
+
+```bash
+# Start the production server (port 3210 by default)
+pnpm start
+
+# The server will be available at:
+# - Local: http://localhost:3210
+# - Network: http://your-lan-ip:3210
+```
+
+#### Process Management with PM2 (Recommended)
+
+For persistent background running and auto-restart:
+
+```bash
+# Install PM2 globally
+npm install -g pm2
+
+# Start the application
+pm2 start "pnpm start" --name lobe-chat
+
+# Enable startup on boot
+pm2 startup
+pm2 save
+
+# Useful PM2 commands
+pm2 status            # Check status
+pm2 logs lobe-chat    # View logs
+pm2 restart lobe-chat # Restart app
+pm2 stop lobe-chat    # Stop app
+pm2 delete lobe-chat  # Remove from PM2
+```
+
+#### Update Deployment
+
+```bash
+# Pull latest changes
+git pull
+
+# Install dependencies
+pnpm install
+
+# Rebuild
+pnpm build
+
+# Restart (if using PM2)
+pm2 restart lobe-chat
+
+# Or restart manually
+pkill -f "next start" && pnpm start
 ```
 
 If you would like to learn more details, please feel free to look at our [📘 Development Guide][docs-dev-guide].
