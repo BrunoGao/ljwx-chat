@@ -88,6 +88,7 @@ One-click **FREE** deployment of your private OpenAI ChatGPT/Claude/Gemini/Groq/
 - [📦 Ecosystem](#-ecosystem)
 - [🧩 Plugins](#-plugins)
 - [⌨️ Local Development](#️-local-development)
+  - [Environment Setup](#environment-setup)
 - [🤝 Contributing](#-contributing)
 - [❤️ Sponsor](#️-sponsor)
 - [🔗 More Products](#-more-products)
@@ -679,6 +680,73 @@ $ git clone https://github.com/lobehub/lobe-chat.git
 $ cd lobe-chat
 $ pnpm install
 $ pnpm dev
+```
+
+### Environment Setup
+
+For full local development with database and file storage, you need to configure the following:
+
+#### 1. Database Setup (PostgreSQL with pgvector)
+
+```bash
+# Install PostgreSQL 14 with pgvector extension
+brew install postgresql@14 pgvector
+brew services start postgresql@14
+
+# Create database
+psql -c "CREATE DATABASE your_database_name;"
+psql -d your_database_name -c "CREATE EXTENSION vector;"
+
+# Run migrations
+bun run db:migrate
+```
+
+#### 2. Object Storage Setup (MinIO)
+
+```bash
+# Start MinIO using Docker Compose
+docker-compose -f docker-compose.minio.yml up -d
+
+# Configure MinIO bucket
+./setup-minio.sh
+```
+
+#### 3. Ollama Setup (for local AI models)
+
+```bash
+# Install Ollama (macOS)
+brew install ollama
+
+# Configure Ollama for remote access
+launchctl setenv OLLAMA_ORIGINS "*"
+launchctl setenv OLLAMA_HOST "0.0.0.0:11434"
+
+# Restart Ollama
+pkill ollama && open -a Ollama
+```
+
+#### 4. Environment Variables
+
+Create `.env.local` file with the following configuration:
+
+```bash
+# Database
+DATABASE_URL=postgresql://user@localhost:5432/database_name
+DATABASE_DRIVER=node
+KEY_VAULTS_SECRET=<generate with: openssl rand -base64 32>
+
+# S3/MinIO Storage
+S3_ENDPOINT=http://127.0.0.1:9002
+S3_BUCKET=your_bucket_name
+S3_PUBLIC_DOMAIN=http://127.0.0.1:9002
+S3_ACCESS_KEY_ID=minioadmin
+S3_SECRET_ACCESS_KEY=minioadmin
+S3_ENABLE_PATH_STYLE=1
+S3_SET_ACL=0
+
+# Ollama (use your LAN IP for remote access)
+OLLAMA_PROXY_URL=http://192.168.1.x:11434
+ENABLED_OLLAMA=1
 ```
 
 If you would like to learn more details, please feel free to look at our [📘 Development Guide][docs-dev-guide].
