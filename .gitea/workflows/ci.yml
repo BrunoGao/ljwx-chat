@@ -1,0 +1,463 @@
+name: Gitea Fast Deploy
+
+on:
+  push:
+    branches: [main, master, develop]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HARBOR_HOST_OVERRIDE: ${{ secrets.HARBOR_CN_HOST }}
+  HARBOR_PROJECT_OVERRIDE: ${{ secrets.HARBOR_PROJECT }}
+  IMAGE_NAME_OVERRIDE: ${{ secrets.IMAGE_NAME }}
+  USE_CN_MIRROR_OVERRIDE: ${{ secrets.USE_CN_MIRROR }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
+    timeout-minutes: 45
+    outputs:
+      image_alias: ${{ steps.meta.outputs.image_alias }}
+      image_name: ${{ steps.meta.outputs.image_name }}
+      image_ref: ${{ steps.meta.outputs.image_ref }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout code
+        env:
+          GITEA_BASE_URL: ${{ secrets.GITEA_BASE_URL }}
+          GITEA_HOST: ${{ secrets.GITEA_HOST }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="${GITEA_BASE_URL:-}"
+          if [ -z "${BASE_URL}" ]; then
+            if [ -n "${GITEA_HOST:-}" ]; then
+              case "${GITEA_HOST}" in
+                http://*|https://*) BASE_URL="${GITEA_HOST}" ;;
+                *) BASE_URL="http://${GITEA_HOST}" ;;
+              esac
+            else
+              BASE_URL="http://192.168.1.83:33000"
+            fi
+          fi
+          BASE_URL="${BASE_URL%/}"
+
+          git clone "${BASE_URL}/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout --detach "${GITHUB_SHA}"
+
+      - name: Resolve metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          HARBOR_HOST="${HARBOR_HOST_OVERRIDE:-harbor.omniverseai.net}"
+          HARBOR_PROJECT="${HARBOR_PROJECT_OVERRIDE:-ljwx}"
+          IMAGE_ALIAS="${IMAGE_NAME_OVERRIDE:-ljwx-chat}"
+          IMAGE_FULL_NAME="${HARBOR_HOST}/${HARBOR_PROJECT}/${IMAGE_ALIAS}"
+          IMAGE_TAG="${GITHUB_SHA:0:7}"
+
+          {
+            echo "harbor_host=${HARBOR_HOST}"
+            echo "image_alias=${IMAGE_ALIAS}"
+            echo "image_name=${IMAGE_FULL_NAME}"
+            echo "image_ref=${IMAGE_FULL_NAME}:${IMAGE_TAG}"
+            echo "image_tag=${IMAGE_TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Ensure Docker CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v docker >/dev/null 2>&1; then
+            if command -v apk >/dev/null 2>&1; then
+              apk add --no-cache docker-cli
+            elif command -v apt-get >/dev/null 2>&1; then
+              apt-get update
+              apt-get install -y docker.io
+            else
+              echo "No supported package manager found to install docker CLI" >&2
+              exit 1
+            fi
+          fi
+          docker version
+
+      - name: Login to Harbor
+        shell: bash
+        run: |
+          set -euo pipefail
+          HARBOR_HOST="${{ steps.meta.outputs.harbor_host }}"
+          PRIMARY_USER="${{ secrets.HARBOR_USERNAME }}"
+          PRIMARY_PASS="${{ secrets.HARBOR_PASSWORD }}"
+          FALLBACK_USER="admin"
+          FALLBACK_PASS="admin123"
+
+          if [ -n "${PRIMARY_USER}" ] && [ -n "${PRIMARY_PASS}" ]; then
+            if echo "${PRIMARY_PASS}" | docker login "${HARBOR_HOST}" -u "${PRIMARY_USER}" --password-stdin; then
+              exit 0
+            fi
+            echo "Primary Harbor credentials failed, trying local fallback user..." >&2
+          fi
+
+          echo "${FALLBACK_PASS}" | docker login "${HARBOR_HOST}" -u "${FALLBACK_USER}" --password-stdin
+
+      - name: Build and push
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${{ steps.meta.outputs.image_ref }}"
+          IMAGE_NAME="${{ steps.meta.outputs.image_name }}"
+          USE_CN_MIRROR="${USE_CN_MIRROR_OVERRIDE:-true}"
+
+          docker build \
+            -f repo/Dockerfile \
+            --build-arg USE_CN_MIRROR="${USE_CN_MIRROR}" \
+            -t "${IMAGE_REF}" \
+            -t "${IMAGE_NAME}:latest" \
+            repo
+
+          docker push "${IMAGE_REF}"
+          docker push "${IMAGE_NAME}:latest"
+
+          DIGEST="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${IMAGE_REF}" \
+            | awk -F'@' 'NF==2 {print $2; exit}')"
+          if [ -z "${DIGEST}" ]; then
+            echo "Failed to resolve digest for ${IMAGE_REF}" >&2
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+  update-deploy:
+    name: Update Deploy Repo
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: needs.build-and-push.result == 'success'
+    timeout-minutes: 12
+    outputs:
+      pr_url: ${{ steps.create_pr.outputs.pr_url }}
+
+    steps:
+      - name: Ensure Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if command -v python3 >/dev/null 2>&1; then
+            :
+          elif command -v python >/dev/null 2>&1; then
+            ln -sf "$(command -v python)" /usr/local/bin/python3
+          elif command -v apk >/dev/null 2>&1; then
+            apk add --no-cache python3 py3-pip
+          elif command -v apt-get >/dev/null 2>&1; then
+            apt-get update
+            apt-get install -y python3 python3-pip
+          else
+            echo "No supported package manager found to install python3" >&2
+            exit 1
+          fi
+
+          if ! python3 -m pip --version >/dev/null 2>&1; then
+            if command -v apk >/dev/null 2>&1; then
+              apk add --no-cache py3-pip
+            elif command -v apt-get >/dev/null 2>&1; then
+              apt-get update
+              apt-get install -y python3-pip
+            else
+              echo "python3 exists but pip is unavailable" >&2
+              exit 1
+            fi
+          fi
+
+          python3 --version
+          python3 -m pip --version
+
+      - name: Install PyYAML
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIP_INDEX_URL="${{ secrets.PIP_INDEX_URL }}"
+          PIP_EXTRA_INDEX_URL="${{ secrets.PIP_EXTRA_INDEX_URL }}"
+          PIP_TRUSTED_HOST="${{ secrets.PIP_TRUSTED_HOST }}"
+          if [ -z "${PIP_INDEX_URL}" ]; then
+            PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
+          fi
+          if [ -z "${PIP_EXTRA_INDEX_URL}" ]; then
+            PIP_EXTRA_INDEX_URL="https://pypi.org/simple"
+          fi
+          if [ -z "${PIP_TRUSTED_HOST}" ]; then
+            PIP_TRUSTED_HOST="pypi.tuna.tsinghua.edu.cn"
+          fi
+
+          PIP_INDEX_URL="${PIP_INDEX_URL}" \
+          PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL}" \
+          PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST}" \
+          python3 -m pip install --quiet --timeout 120 --retries 10 pyyaml
+
+      - name: Resolve deploy config
+        id: cfg
+        env:
+          DEPLOY_REPO_OVERRIDE: ${{ secrets.DEPLOY_REPO }}
+          DEPLOY_OVERLAY_FILE_OVERRIDE: ${{ secrets.DEPLOY_OVERLAY_FILE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPLOY_REPO="${DEPLOY_REPO_OVERRIDE:-gao/ljwx-deploy}"
+          OVERLAY_FILE="${DEPLOY_OVERLAY_FILE_OVERRIDE:-apps/ljwx-chat/overlays/prod/kustomization.yaml}"
+          {
+            echo "deploy_repo=${DEPLOY_REPO}"
+            echo "overlay_file=${OVERLAY_FILE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Clone deploy repo
+        env:
+          DEPLOY_REPO: ${{ steps.cfg.outputs.deploy_repo }}
+          DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_HOST: ${{ secrets.GITEA_HOST }}
+          GITEA_BASE_URL: ${{ secrets.GITEA_BASE_URL }}
+          GITEA_USERNAME: ${{ secrets.GITEA_USERNAME }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="${DEPLOY_REPO_TOKEN:-${GITEA_TOKEN:-}}"
+          if [ -z "${TOKEN:-}" ]; then
+            echo "DEPLOY_REPO_TOKEN or GITEA_TOKEN is required" >&2
+            exit 1
+          fi
+
+          BASE_URL="${GITEA_BASE_URL:-}"
+          if [ -z "${BASE_URL}" ]; then
+            if [ -n "${GITEA_HOST:-}" ]; then
+              case "${GITEA_HOST}" in
+                http://*|https://*) BASE_URL="${GITEA_HOST}" ;;
+                *) BASE_URL="http://${GITEA_HOST}" ;;
+              esac
+            else
+              BASE_URL="http://192.168.1.83:33000"
+            fi
+          fi
+          BASE_URL="${BASE_URL%/}"
+
+          AUTH_USER="${GITEA_USERNAME:-${DEPLOY_REPO%%/*}}"
+          case "${BASE_URL}" in
+            https://*) AUTH_BASE="https://${AUTH_USER}:${TOKEN}@${BASE_URL#https://}" ;;
+            http://*) AUTH_BASE="http://${AUTH_USER}:${TOKEN}@${BASE_URL#http://}" ;;
+            *) AUTH_BASE="http://${AUTH_USER}:${TOKEN}@${BASE_URL}" ;;
+          esac
+
+          git clone "${AUTH_BASE}/${DEPLOY_REPO}.git" deploy-repo
+
+      - name: Update overlay kustomization
+        env:
+          OVERLAY_FILE: ${{ steps.cfg.outputs.overlay_file }}
+          IMAGE_FULL_NAME: ${{ needs.build-and-push.outputs.image_name }}
+          IMAGE_ALIAS: ${{ needs.build-and-push.outputs.image_alias }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
+
+          overlay = Path("deploy-repo") / os.environ["OVERLAY_FILE"]
+          image_full_name = os.environ["IMAGE_FULL_NAME"]
+          image_alias = os.environ.get("IMAGE_ALIAS") or image_full_name.rsplit("/", 1)[-1]
+          image_tag = os.environ["IMAGE_TAG"]
+
+          if not overlay.exists():
+              overlay.parent.mkdir(parents=True, exist_ok=True)
+              data = {
+                  "apiVersion": "kustomize.config.k8s.io/v1beta1",
+                  "kind": "Kustomization",
+                  "namespace": "chat",
+                  "resources": ["../../base"],
+                  "images": [],
+              }
+          else:
+              data = yaml.safe_load(overlay.read_text()) or {}
+
+          if not isinstance(data, dict):
+              data = {}
+          images = data.setdefault("images", [])
+          if not isinstance(images, list):
+              images = []
+              data["images"] = images
+
+          found = False
+          for img in images:
+              if not isinstance(img, dict):
+                  continue
+              name = str(img.get("name", ""))
+              new_name = str(img.get("newName", ""))
+              if image_full_name in (name, new_name) or image_alias in (name, new_name):
+                  img["name"] = image_alias
+                  img["newName"] = image_full_name
+                  img["newTag"] = image_tag
+                  found = True
+                  break
+
+          if not found:
+              images.append(
+                  {
+                      "name": image_alias,
+                      "newName": image_full_name,
+                      "newTag": image_tag,
+                  }
+              )
+
+          overlay.write_text(yaml.safe_dump(data, sort_keys=False))
+          print(f"Updated {overlay} -> {image_full_name}:{image_tag}")
+          PY
+
+      - name: Create deploy PR
+        id: create_pr
+        working-directory: deploy-repo
+        env:
+          DEPLOY_REPO: ${{ steps.cfg.outputs.deploy_repo }}
+          OVERLAY_FILE: ${{ steps.cfg.outputs.overlay_file }}
+          DEPLOY_REPO_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_HOST: ${{ secrets.GITEA_HOST }}
+          GITEA_BASE_URL: ${{ secrets.GITEA_BASE_URL }}
+          GIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_REPO: ${{ github.repository }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="${DEPLOY_REPO_TOKEN:-${GITEA_TOKEN:-}}"
+          if [ -z "${TOKEN:-}" ]; then
+            echo "DEPLOY_REPO_TOKEN or GITEA_TOKEN is required" >&2
+            exit 1
+          fi
+
+          BASE_URL="${GITEA_BASE_URL:-}"
+          if [ -z "${BASE_URL}" ]; then
+            if [ -n "${GITEA_HOST:-}" ]; then
+              case "${GITEA_HOST}" in
+                http://*|https://*) BASE_URL="${GITEA_HOST}" ;;
+                *) BASE_URL="http://${GITEA_HOST}" ;;
+              esac
+            else
+              BASE_URL="http://192.168.1.83:33000"
+            fi
+          fi
+          BASE_URL="${BASE_URL%/}"
+
+          SHA_SHORT="${GIT_SHA:0:7}"
+          RUN_SUFFIX="${RUN_ID:-$(date +%s)}"
+          BRANCH="bot/release-ljwx-chat-${RUN_SUFFIX}"
+
+          git config user.name "gitea-actions[bot]"
+          git config user.email "gitea-actions[bot]@users.noreply.gitea.io"
+          git checkout -b "${BRANCH}"
+          git add "${OVERLAY_FILE}"
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            echo "pr_url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "release(ljwx-chat): ${SHA_SHORT}"
+          git push origin "${BRANCH}"
+
+          BASE_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+          BASE_BRANCH="${BASE_BRANCH:-main}"
+
+          PR_TITLE="release(ljwx-chat): ${SHA_SHORT}"
+          PR_BODY="$(cat <<EOF2
+          Automated release PR from ${SOURCE_REPO}@${GIT_SHA}
+
+          Image: ${IMAGE_REF}
+          digest: ${IMAGE_DIGEST}
+
+          Changes: ${COMMIT_MESSAGE:-N/A}
+          EOF2
+          )"
+
+          export BASE_URL DEPLOY_REPO TOKEN BRANCH BASE_BRANCH PR_TITLE PR_BODY
+          PR_URL="$(python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          api = f"{os.environ['BASE_URL']}/api/v1/repos/{os.environ['DEPLOY_REPO']}/pulls"
+          payload = {
+              "title": os.environ["PR_TITLE"],
+              "head": os.environ["BRANCH"],
+              "base": os.environ["BASE_BRANCH"],
+              "body": os.environ["PR_BODY"],
+          }
+          request = urllib.request.Request(
+              api,
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": f"token {os.environ['TOKEN']}",
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
+              },
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request) as response:
+                  data = json.loads(response.read().decode("utf-8"))
+          except urllib.error.HTTPError as error:
+              detail = error.read().decode("utf-8", errors="replace")
+              print(detail, file=sys.stderr)
+              raise
+
+          print(data.get("html_url", ""))
+          PY
+          )"
+
+          if [ -z "${PR_URL}" ]; then
+            echo "Failed to parse PR URL from Gitea API response" >&2
+            exit 1
+          fi
+
+          echo "pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
+          echo "Created PR: ${PR_URL}"
+
+  summary:
+    name: Fast Deploy Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-push, update-deploy]
+    if: always()
+    steps:
+      - name: Generate summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          SUMMARY_FILE="${GITHUB_STEP_SUMMARY:-/tmp/gitea-step-summary.md}"
+
+          {
+            echo "## Gitea Fast Deploy Summary"
+            echo
+            echo "- Build: ${{ needs.build-and-push.result }}"
+            echo "- Deploy: ${{ needs.update-deploy.result }}"
+            if [ "${{ needs.build-and-push.result }}" = "success" ]; then
+              echo "- Image: ${{ needs.build-and-push.outputs.image_ref }}"
+            fi
+            if [ -n "${{ needs.update-deploy.outputs.pr_url }}" ]; then
+              echo "- Deploy PR: ${{ needs.update-deploy.outputs.pr_url }}"
+            fi
+          } >> "${SUMMARY_FILE}"
+
+          cat "${SUMMARY_FILE}"
