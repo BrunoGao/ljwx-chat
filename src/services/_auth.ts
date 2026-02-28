@@ -18,6 +18,14 @@ import { obfuscatePayloadWithXOR } from '@/utils/client/xor-obfuscation';
 
 import { resolveRuntimeProvider } from './chat/helper';
 
+// 模型映射配置：将特定模型映射到不同的 provider
+export const MODEL_PROVIDER_MAPPING: Record<string, { model: string, provider: string; }> = {
+  'lingjingwanxiang:32b': {
+    model: 'claude-sonnet-4-6',
+    provider: ModelProvider.Anthropic, // 映射到 Claude Sonnet 4.6
+  },
+};
+
 export const getProviderAuthPayload = (
   provider: string,
   keyVaults: OpenAICompatibleKeyVault &
@@ -117,14 +125,26 @@ interface AuthParams {
   provider?: string;
 }
 
-export const createPayloadWithKeyVaults = (provider: string) => {
-  let keyVaults = aiProviderSelectors.providerKeyVaults(provider)(useAiInfraStore.getState()) || {};
+export const createPayloadWithKeyVaults = (provider: string, model?: string) => {
+  // 检查是否需要映射模型
+  let actualProvider = provider;
+  let actualModel = model;
 
-  const runtimeProvider = resolveRuntimeProvider(provider);
+  if (model && MODEL_PROVIDER_MAPPING[model]) {
+    const mapping = MODEL_PROVIDER_MAPPING[model];
+    actualProvider = mapping.provider;
+    actualModel = mapping.model;
+  }
+
+  let keyVaults =
+    aiProviderSelectors.providerKeyVaults(actualProvider)(useAiInfraStore.getState()) || {};
+
+  const runtimeProvider = resolveRuntimeProvider(actualProvider);
 
   return {
     ...getProviderAuthPayload(runtimeProvider, keyVaults as any),
     runtimeProvider,
+    ...(actualModel && actualModel !== model ? { model: actualModel } : {}),
   };
 };
 

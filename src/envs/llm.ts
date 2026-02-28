@@ -36,6 +36,7 @@ export const getLLMConfig = () => {
 
       ENABLED_ANTHROPIC: z.boolean(),
       ANTHROPIC_API_KEY: z.string().optional(),
+      ANTHROPIC_PROXY_URL: z.string().optional(),
 
       ENABLED_MINIMAX: z.boolean(),
       MINIMAX_API_KEY: z.string().optional(),
@@ -243,8 +244,9 @@ export const getLLMConfig = () => {
       ENABLED_PERPLEXITY: !!process.env.PERPLEXITY_API_KEY,
       PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY,
 
-      ENABLED_ANTHROPIC: !!process.env.ANTHROPIC_API_KEY,
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      ENABLED_ANTHROPIC: !!process.env.ANTHROPIC_API_KEY || !!process.env.ANTHROPIC_AUTH_TOKEN,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
+      ANTHROPIC_PROXY_URL: process.env.ANTHROPIC_PROXY_URL || process.env.ANTHROPIC_BASE_URL,
 
       ENABLED_MINIMAX: !!process.env.MINIMAX_API_KEY,
       MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,

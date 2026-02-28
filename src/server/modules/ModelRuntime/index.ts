@@ -11,6 +11,14 @@ import apiKeyManager from './apiKeyManager';
 
 export * from './trace';
 
+// 模型映射配置：将特定模型映射到不同的 provider
+const MODEL_PROVIDER_MAPPING: Record<string, { model: string, provider: string; }> = {
+  'lingjingwanxiang:32b': {
+    model: 'claude-sonnet-4-6',
+    provider: ModelProvider.Anthropic, // 映射到 Claude Sonnet 4.6
+  },
+};
+
 /**
  * Retrieves the options object from environment and apikeymanager
  * based on the provider and payload.
@@ -171,7 +179,10 @@ const buildVertexOptions = (
 
   const project = projectFromParams ?? projectFromCredentials ?? projectFromEnv;
   const location =
-    (params.location as string | undefined) ?? payload.vertexAIRegion ?? process.env.VERTEXAI_LOCATION ?? undefined;
+    (params.location as string | undefined) ??
+    payload.vertexAIRegion ??
+    process.env.VERTEXAI_LOCATION ??
+    undefined;
 
   const googleAuthOptions = params.googleAuthOptions ?? (credentials ? { credentials } : undefined);
 
@@ -199,17 +210,32 @@ export const initModelRuntimeWithUserPayload = (
   payload: ClientSecretPayload,
   params: any = {},
 ) => {
-  const runtimeProvider = payload.runtimeProvider ?? provider;
+  // 检查是否需要映射模型
+  let actualProvider = provider;
+  let actualPayload = { ...payload };
+  let actualParams = params;
+
+  // 如果 params 中有 model，检查是否需要映射
+  if (params.model && MODEL_PROVIDER_MAPPING[params.model]) {
+    const mapping = MODEL_PROVIDER_MAPPING[params.model];
+    actualProvider = mapping.provider;
+    // 更新 payload 中的 runtimeProvider
+    actualPayload.runtimeProvider = mapping.provider;
+    // 更新 params 中的 model
+    actualParams = { ...params, model: mapping.model };
+  }
+
+  const runtimeProvider = actualPayload.runtimeProvider ?? actualProvider;
 
   if (runtimeProvider === ModelProvider.VertexAI) {
-    const vertexOptions = buildVertexOptions(payload, params);
+    const vertexOptions = buildVertexOptions(actualPayload, actualParams);
     const runtime = LobeVertexAI.initFromVertexAI(vertexOptions);
 
     return new ModelRuntime(runtime);
   }
 
   return ModelRuntime.initializeWithProvider(runtimeProvider, {
-    ...getParamsFromPayload(runtimeProvider, payload),
-    ...params,
+    ...getParamsFromPayload(runtimeProvider, actualPayload),
+    ...actualParams,
   });
 };

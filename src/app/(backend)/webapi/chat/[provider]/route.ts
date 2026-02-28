@@ -17,17 +17,21 @@ export const POST = checkAuth(async (req: Request, { params, jwtPayload, createR
   const provider = (await params)!.provider!;
 
   try {
-    // ============  1. init chat model   ============ //
+    // ============  1. get request data   ============ //
+    const data = (await req.json()) as ChatStreamPayload;
+
+    // ============  2. init chat model   ============ //
     let modelRuntime: ModelRuntime;
     if (createRuntime) {
       modelRuntime = createRuntime(jwtPayload);
     } else {
-      modelRuntime = await initModelRuntimeWithUserPayload(provider, jwtPayload);
+      // 传递 model 参数以支持模型映射
+      modelRuntime = await initModelRuntimeWithUserPayload(provider, jwtPayload, {
+        model: data.model,
+      });
     }
 
-    // ============  2. create chat completion   ============ //
-
-    const data = (await req.json()) as ChatStreamPayload;
+    // ============  3. create chat completion   ============ //
 
     const tracePayload = getTracePayload(req);
 

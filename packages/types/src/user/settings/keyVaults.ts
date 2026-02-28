@@ -51,5 +51,6 @@ export interface SearchEngineKeyVaults {
 }
 
 export interface UserKeyVaults extends SearchEngineKeyVaults {
+  anthropic?: OpenAICompatibleKeyVault;
   search1api?: OpenAICompatibleKeyVault;
 }

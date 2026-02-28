@@ -3,9 +3,10 @@ import { ModelRuntime } from '@lobechat/model-runtime';
 import { createPayloadWithKeyVaults } from '../_auth';
 
 export interface InitializeWithClientStoreOptions {
+  model?: string;
   payload?: any;
   provider: string;
-  runtimeProvider?: string;
+  runtimeProvider?: string; // 添加 model 参数
 }
 
 /**
@@ -21,6 +22,7 @@ export const initializeWithClientStore = ({
   provider,
   runtimeProvider,
   payload,
+  model,
 }: InitializeWithClientStoreOptions) => {
   /**
    * Since #5267, we map parameters for client-fetch in function `getProviderAuthPayload`
@@ -28,7 +30,7 @@ export const initializeWithClientStore = ({
    * @see https://github.com/lobehub/lobe-chat/pull/5267
    * @file src/services/_auth.ts
    */
-  const providerAuthPayload = { ...payload, ...createPayloadWithKeyVaults(provider) };
+  const providerAuthPayload = { ...payload, ...createPayloadWithKeyVaults(provider, model) };
   const commonOptions = {
     // Allow OpenAI SDK and Anthropic SDK run on browser
     dangerouslyAllowBrowser: true,
