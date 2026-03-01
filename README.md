@@ -227,6 +227,8 @@ pkill -f "next start" && pnpm start
 
 项目支持 Kubernetes 部署，相关配置文件位于 `k8s/` 目录。
 
+CI/CD 工作流说明见：`docs/GITHUB-GITEA-WORKFLOW-GUIDE.md`。
+
 ---
 
 ## 🛠️ 技术栈
