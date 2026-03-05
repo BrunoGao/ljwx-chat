@@ -1,0 +1,14 @@
+# Copy this entry into:
+# /root/codes/ljwx-deploy/factory/onboarding/services.catalog.yaml
+- service: ljwx-chat
+  environment: dev
+  overlay_path: apps/ljwx-chat/overlays/ljwx-chat-dev/kustomization.yaml
+  kustomize_image_name: ghcr.io/brunogaosz/ljwx-chat
+  harbor_image: harbor.eu.lingjingwanxiang.cn/app/ljwx-chat
+  argocd_app: ljwx-chat-dev
+  smoke_endpoint: http://ljwx-chat.ljwx-chat-dev.svc.cluster.local/health
+  deploy_namespace: ljwx-chat-dev
+  profiles: [local-k3s, orbstack-k3s-cn]
+  scaffold_app: true
+  generate_argocd_app: true
+  argocd_app_file: argocd-apps/90-ljwx-chat-dev.yaml

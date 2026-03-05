@@ -1,0 +1,68 @@
+name: build-and-enqueue
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: "deploy environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - demo
+          - prod
+
+jobs:
+  gitops_gate:
+    if: github.event_name == 'pull_request'
+    uses: BrunoGaoSZ/ljwx-workflow-templates/.github/workflows/gitops-onboarding-gate.yml@main
+    with:
+      service: ljwx-chat
+      deploy_repo: BrunoGaoSZ/ljwx-deploy
+      deploy_ref: main
+      strict: true
+    secrets:
+      deploy_repo_token: ${{ secrets.DEPLOY_REPO_TOKEN }}
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "replace with your lint/test command"
+
+  build:
+    if: github.event_name != 'pull_request'
+    needs: [test]
+    uses: BrunoGaoSZ/ljwx-workflow-templates/.github/workflows/build-ghcr.yml@main
+    with:
+      image_name: brunogaosz/ljwx-chat
+      context: .
+      dockerfile: Dockerfile
+      platforms: linux/amd64,linux/arm64
+      push_latest: true
+    secrets: inherit
+
+  enqueue:
+    if: github.event_name != 'pull_request'
+    needs: [build]
+    uses: BrunoGaoSZ/ljwx-workflow-templates/.github/workflows/enqueue-release.yml@main
+    with:
+      service: ljwx-chat
+      env: ${{ github.event_name == 'workflow_dispatch' && inputs.target_env || 'dev' }}
+      ghcr_ref: ${{ needs.build.outputs.ghcr_ref }}
+      tag: ${{ needs.build.outputs.tag }}
+      source_git_sha: ${{ github.sha }}
+      deploy_repo: BrunoGaoSZ/ljwx-deploy
+      deploy_ref: main
+      queue_file: release/queue.yaml
+      open_pr: true
+      auto_merge_pr: true
+      merge_method: merge
+      pr_title_prefix: queue
+    secrets:
+      deploy_repo_token: ${{ secrets.DEPLOY_REPO_TOKEN }}

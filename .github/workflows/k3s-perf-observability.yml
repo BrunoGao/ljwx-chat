@@ -1,0 +1,93 @@
+name: k3s-perf-observability
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Kubernetes namespace"
+        required: false
+        default: "ljwx-chat"
+      deployment_name:
+        description: "Kubernetes deployment name"
+        required: false
+        default: "ljwx-chat"
+      service_name:
+        description: "Kubernetes service name"
+        required: false
+        default: "ljwx-chat"
+      service_port:
+        description: "Kubernetes service port"
+        required: false
+        default: "80"
+      verify_timeout_minutes:
+        description: "Rollout verify timeout minutes"
+        required: false
+        default: "10"
+      expected_image:
+        description: "Expected image digest (sha256:... or image@sha256:...)"
+        required: false
+        default: ""
+      perf_vus:
+        description: "k6 VUs"
+        required: false
+        default: "10"
+      perf_duration:
+        description: "k6 duration"
+        required: false
+        default: "60s"
+      prometheus_namespace:
+        description: "Prometheus namespace"
+        required: false
+        default: "monitoring"
+      prometheus_service:
+        description: "Prometheus service name (empty = auto discover)"
+        required: false
+        default: ""
+      tempo_namespace:
+        description: "Tempo namespace (requested namespace)"
+        required: false
+        default: "monitoring"
+      tempo_service:
+        description: "Tempo service name (empty = auto discover)"
+        required: false
+        default: ""
+      tempo_required:
+        description: "Fail workflow when Tempo endpoint is unavailable"
+        required: false
+        default: "false"
+      tempo_service_pattern:
+        description: "Regex used for Tempo service auto-discovery"
+        required: false
+        default: "^tempo"
+  workflow_run:
+    workflows: ["acceptance-local-k3s"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  perf-observability:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    uses: BrunoGaoSZ/ljwx-workflow-templates/.github/workflows/k3s-perf-observability.yml@main
+    with:
+      namespace: ${{ github.event_name == 'workflow_dispatch' && inputs.namespace || 'ljwx-chat' }}
+      deployment_name: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_name || 'ljwx-chat' }}
+      service_name: ${{ github.event_name == 'workflow_dispatch' && inputs.service_name || 'ljwx-chat' }}
+      service_port: ${{ github.event_name == 'workflow_dispatch' && inputs.service_port || '80' }}
+      verify_timeout_minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_timeout_minutes || '10' }}
+      expected_image: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_image || '' }}
+      deploy_repo: BrunoGaoSZ/ljwx-deploy
+      deploy_values_file: apps/ljwx-chat/overlays/prod/kustomization.yaml
+      perf_vus: ${{ github.event_name == 'workflow_dispatch' && inputs.perf_vus || '10' }}
+      perf_duration: ${{ github.event_name == 'workflow_dispatch' && inputs.perf_duration || '60s' }}
+      prometheus_namespace: ${{ github.event_name == 'workflow_dispatch' && inputs.prometheus_namespace || 'monitoring' }}
+      prometheus_service: ${{ github.event_name == 'workflow_dispatch' && inputs.prometheus_service || '' }}
+      tempo_namespace: ${{ github.event_name == 'workflow_dispatch' && inputs.tempo_namespace || 'monitoring' }}
+      tempo_service: ${{ github.event_name == 'workflow_dispatch' && inputs.tempo_service || '' }}
+      tempo_required: ${{ github.event_name == 'workflow_dispatch' && (inputs.tempo_required == 'true') || false }}
+      tempo_service_pattern: ${{ github.event_name == 'workflow_dispatch' && inputs.tempo_service_pattern || '^tempo' }}
+      runner_labels: '["self-hosted","k3s-local"]'
+    secrets:
+      kube_config_b64: ${{ secrets.KUBE_CONFIG_B64 }}
+      deploy_repo_token: ${{ secrets.DEPLOY_REPO_TOKEN }}
