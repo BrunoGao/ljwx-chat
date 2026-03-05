@@ -1,0 +1,212 @@
+{
+  "name": "LJWX SmartCS - Ops KPI Daily Rollup",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 4,
+              "minute": 30
+            }
+          ]
+        }
+      },
+      "name": "Daily KPI Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        220,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.LANGFUSE_BASE_URL + '/api/public/metrics?period=1d' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.LANGFUSE_PUBLIC_KEY + ':' + $env.LANGFUSE_SECRET_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Fetch Langfuse Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        500,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.LLM_BILLING_API_URL || 'https://api.openai.com/v1/usage' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + ($env.LLM_BILLING_API_TOKEN || '') }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Fetch LLM Billing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        780,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "report_title",
+              "value": "AI客服日报"
+            },
+            {
+              "name": "report_text",
+              "value": "={{ 'date=' + $now + '; kpi_source=langfuse; billing_source=llm-api; please replace with real KPI formula in production.' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Build KPI Snapshot",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1060,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANALYTICS_INGEST_URL || 'http://analytics-writer.analytics.svc.cluster.local:8080/kpi/daily' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source: 'n8n', report_title: $json.report_title, report_text: $json.report_text, ts: $now } }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Persist KPI Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1320,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEISHU_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { msg_type: 'text', content: { text: '[SmartCS][日报] ' + $json.report_text } } }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Send KPI Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1320,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Daily KPI Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Langfuse Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Langfuse Metrics": {
+      "main": [
+        [
+          {
+            "node": "Fetch LLM Billing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch LLM Billing": {
+      "main": [
+        [
+          {
+            "node": "Build KPI Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build KPI Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Persist KPI Snapshot",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send KPI Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {}
+}

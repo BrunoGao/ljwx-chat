@@ -1,0 +1,197 @@
+{
+  "name": "LJWX SmartCS - Business Proxy Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smart-cs/business-proxy",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Business Proxy Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        220,
+        320
+      ],
+      "webhookId": "smart-cs-business-proxy"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action || '' }}",
+              "operation": "equals",
+              "value2": "order_query"
+            }
+          ]
+        }
+      },
+      "name": "Action Is Order Query",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        470,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ERP_API_BASE + '/orders/' + ($json.body.order_id || '') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.ERP_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Query ERP Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        760,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action || '' }}",
+              "operation": "equals",
+              "value2": "ticket_create"
+            }
+          ]
+        }
+      },
+      "name": "Action Is Ticket Create",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        760,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.TICKET_API_BASE + '/tickets' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.TICKET_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { user_id: $json.body.user_id, subject: $json.body.subject || 'AI handoff ticket', description: $json.body.description || '', source: 'smart-cs' } }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Create Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1040,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "result",
+              "value": "unsupported_action"
+            },
+            {
+              "name": "message",
+              "value": "Only order_query and ticket_create are supported"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Unsupported Action",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        560
+      ]
+    }
+  ],
+  "connections": {
+    "Business Proxy Webhook": {
+      "main": [
+        [
+          {
+            "node": "Action Is Order Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Is Order Query": {
+      "main": [
+        [
+          {
+            "node": "Query ERP Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Action Is Ticket Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Is Ticket Create": {
+      "main": [
+        [
+          {
+            "node": "Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unsupported Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {}
+}

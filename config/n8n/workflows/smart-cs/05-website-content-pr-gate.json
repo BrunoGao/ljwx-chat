@@ -1,0 +1,197 @@
+{
+  "name": "LJWX SmartCS - Website Content PR Gate",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smart-cs/website-content-update",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Website Content Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        220,
+        320
+      ],
+      "webhookId": "smart-cs-website-content"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "owner",
+              "value": "={{ $env.GITHUB_OWNER }}"
+            },
+            {
+              "name": "repo",
+              "value": "={{ $env.GITHUB_REPO }}"
+            },
+            {
+              "name": "base_branch",
+              "value": "={{ $json.body.base || 'develop' }}"
+            },
+            {
+              "name": "head_branch",
+              "value": "={{ $json.body.head || 'bot/content-sync-' + $now.toFormat('yyyyLLdd') }}"
+            },
+            {
+              "name": "pr_title",
+              "value": "={{ $json.body.title || 'chore(content): sync website faq and help docs' }}"
+            },
+            {
+              "name": "pr_body",
+              "value": "={{ $json.body.summary || 'Auto-generated content update. Review checklist is required before merge.' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Build PR Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        500,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GITHUB_API_BASE + '/repos/' + $json.owner + '/' + $json.repo + '/pulls' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { title: $json.pr_title, head: $json.head_branch, base: $json.base_branch, body: $json.pr_body } }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Create Content PR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        780,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ JSON.stringify($json.body.labels || []) }}",
+              "operation": "contains",
+              "value2": "urgent"
+            }
+          ]
+        }
+      },
+      "name": "Has Urgent Label",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEISHU_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { msg_type: 'text', content: { text: '[SmartCS][URGENT] Website content PR requires fast review within 4 hours.' } } }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Escalate Urgent PR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1300,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Website Content Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build PR Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build PR Payload": {
+      "main": [
+        [
+          {
+            "node": "Create Content PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Content PR": {
+      "main": [
+        [
+          {
+            "node": "Has Urgent Label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Urgent Label": {
+      "main": [
+        [
+          {
+            "node": "Escalate Urgent PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {}
+}

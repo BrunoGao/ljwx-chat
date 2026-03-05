@@ -1,0 +1,53 @@
+profile: smart-cs-data-pipelines
+version: "1.0.0"
+description: >-
+  n8n workflow templates for enterprise smart customer service data lifecycle.
+workflows:
+  - id: knowledge_base_sync
+    file: 01-knowledge-base-sync.json
+    category: knowledge_base
+    trigger: cron
+    objective: Sync docs/faq/wiki/changelog into Dify Knowledge API.
+  - id: conversation_trace_sync
+    file: 02-conversation-trace-sync.json
+    category: conversation
+    trigger: webhook
+    objective: Enrich conversation metadata and push trace to Langfuse + analytics DB.
+  - id: business_proxy_router
+    file: 03-business-proxy-router.json
+    category: business
+    trigger: webhook
+    objective: Route Dify tool calls to ERP/CRM/Ticket APIs with auth guard.
+  - id: ops_kpi_daily_rollup
+    file: 04-ops-kpi-daily-rollup.json
+    category: operations
+    trigger: cron
+    objective: Aggregate KPI/cost/latency and push daily report.
+  - id: website_content_pr_gate
+    file: 05-website-content-pr-gate.json
+    category: website_content
+    trigger: webhook
+    objective: Build website content PR with approval gate and urgent escalation.
+required_env:
+  - DIFY_API_BASE
+  - DIFY_API_KEY
+  - DIFY_DATASET_ID
+  - LANGFUSE_BASE_URL
+  - LANGFUSE_PUBLIC_KEY
+  - LANGFUSE_SECRET_KEY
+  - ANALYTICS_POSTGRES_DSN
+  - ERP_API_BASE
+  - ERP_API_TOKEN
+  - TICKET_API_BASE
+  - TICKET_API_TOKEN
+  - GITHUB_API_BASE
+  - GITHUB_OWNER
+  - GITHUB_REPO
+  - GITHUB_TOKEN
+  - FEISHU_WEBHOOK_URL
+optional_env:
+  - ANALYTICS_INGEST_URL
+  - LLM_BILLING_API_URL
+  - LLM_BILLING_API_TOKEN
+  - ERP_API_TIMEOUT_MS
+  - TICKET_API_TIMEOUT_MS

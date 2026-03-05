@@ -1,0 +1,152 @@
+{
+  "name": "LJWX SmartCS - Conversation Trace Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smart-cs/conversation-trace",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Conversation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ],
+      "webhookId": "smart-cs-conversation-trace"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "conversation_id",
+              "value": "={{ $json.body.conversation_id || $json.conversation_id || '' }}"
+            },
+            {
+              "name": "message_id",
+              "value": "={{ $json.body.message_id || $json.message_id || '' }}"
+            },
+            {
+              "name": "channel",
+              "value": "={{ $json.body.channel || 'web' }}"
+            },
+            {
+              "name": "intent",
+              "value": "={{ $json.body.intent || 'unknown' }}"
+            },
+            {
+              "name": "handoff",
+              "value": "={{ String($json.body.handoff_triggered || false) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Normalize Conversation Event",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LANGFUSE_BASE_URL + '/api/public/ingestion' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $env.LANGFUSE_PUBLIC_KEY + ':' + $env.LANGFUSE_SECRET_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { batch: [ { type: 'event', body: { name: 'conversation_trace', metadata: { conversation_id: $json.conversation_id, message_id: $json.message_id, channel: $json.channel, intent: $json.intent, handoff: $json.handoff } } } ] } }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Push Trace To Langfuse",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        760,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANALYTICS_INGEST_URL || 'http://analytics-writer.analytics.svc.cluster.local:8080/events' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source: 'n8n', topic: 'conversation_event', payload: { conversation_id: $json.conversation_id, message_id: $json.message_id, channel: $json.channel, intent: $json.intent, handoff: $json.handoff, ts: $now } } }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Write Analytics Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        760,
+        380
+      ]
+    }
+  ],
+  "connections": {
+    "Conversation Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Conversation Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Conversation Event": {
+      "main": [
+        [
+          {
+            "node": "Push Trace To Langfuse",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Analytics Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {}
+}

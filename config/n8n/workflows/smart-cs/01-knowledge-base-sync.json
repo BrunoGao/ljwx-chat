@@ -1,0 +1,193 @@
+{
+  "name": "LJWX SmartCS - Knowledge Base Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 3,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "dataset_id",
+              "value": "={{ $env.DIFY_DATASET_ID }}"
+            },
+            {
+              "name": "sync_mode",
+              "value": "incremental"
+            },
+            {
+              "name": "sources",
+              "value": "docs,faq,notion,changelog,tickets"
+            },
+            {
+              "name": "trace_tag",
+              "value": "smart-cs-knowledge-base"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Build Sync Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DIFY_API_BASE + '/v1/datasets/' + $json.dataset_id + '/documents/upsert' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.DIFY_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { sync_mode: $json.sync_mode, sources: $json.sources, metadata: { trace_tag: $json.trace_tag, trigger: 'cron' } } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Upsert Knowledge To Dify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "report_title",
+              "value": "Knowledge base sync finished"
+            },
+            {
+              "name": "report_message",
+              "value": "={{ 'dataset=' + $env.DIFY_DATASET_ID + '; status=done; ts=' + $now }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Build Sync Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEISHU_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { msg_type: 'text', content: { text: '[SmartCS] ' + $json.report_title + ' | ' + $json.report_message } } }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Notify Feishu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1280,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Sync Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Sync Payload": {
+      "main": [
+        [
+          {
+            "node": "Upsert Knowledge To Dify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Knowledge To Dify": {
+      "main": [
+        [
+          {
+            "node": "Build Sync Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Sync Report": {
+      "main": [
+        [
+          {
+            "node": "Notify Feishu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {}
+}
