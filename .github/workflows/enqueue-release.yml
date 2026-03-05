@@ -243,7 +243,7 @@ jobs:
 
             This PR only updates \`${QUEUE_FILE}\` and does not wait for registry replication.
             Promoter will process queue asynchronously.
-            EOF
+          EOF
 
             if [[ -n "${PR_BODY_EXTRA}" ]]; then
               {
