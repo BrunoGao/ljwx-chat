@@ -20,14 +20,30 @@ on:
 jobs:
   gitops_gate:
     if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/gitops-onboarding-gate.yml
-    with:
-      service: ljwx-chat
-      deploy_repo: BrunoGaoSZ/ljwx-deploy
-      deploy_ref: main
-      strict: true
-    secrets:
-      deploy_repo_token: ${{ secrets.DEPLOY_REPO_TOKEN }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout service repository
+        uses: actions/checkout@v4
+        with:
+          path: service-repo
+
+      - name: Checkout deploy repository
+        uses: actions/checkout@v4
+        with:
+          repository: BrunoGaoSZ/ljwx-deploy
+          ref: main
+          path: deploy-repo
+          token: ${{ secrets.DEPLOY_REPO_TOKEN != '' && secrets.DEPLOY_REPO_TOKEN || github.token }}
+
+      - name: Run onboarding scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash deploy-repo/scripts/ops/scan-gitops-context.sh \
+            --repo service-repo \
+            --service ljwx-chat \
+            --skip-templates-check \
+            --strict
 
   test:
     runs-on: ubuntu-latest
@@ -38,31 +54,179 @@ jobs:
   build:
     if: github.event_name != 'pull_request'
     needs: [test]
-    uses: ./.github/workflows/build-ghcr.yml
-    with:
-      image_name: brunogaosz/ljwx-chat
-      context: .
-      dockerfile: Dockerfile
-      platforms: linux/amd64,linux/arm64
-      push_latest: true
-    secrets: inherit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      ghcr_ref: ${{ steps.pack.outputs.ghcr_ref }}
+      tag: ${{ steps.meta.outputs.sha_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA::7}"
+          SAFE_BRANCH="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9._-]#-#g')"
+          IMAGE="ghcr.io/brunogaosz/ljwx-chat"
+          SHA_TAG="sha-${SHORT_SHA}"
+          BRANCH_TAG="branch-${SAFE_BRANCH}"
+
+          {
+            echo "sha_tag=${SHA_TAG}"
+            echo "tags<<EOF"
+            echo "${IMAGE}:${SHA_TAG}"
+            echo "${IMAGE}:${BRANCH_TAG}"
+            echo "${IMAGE}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push
+        id: docker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=ljwx-chat
+          cache-to: type=gha,scope=ljwx-chat,mode=max
+
+      - name: Expose outputs
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIGEST="${{ steps.docker.outputs.digest }}"
+          if [[ -z "${DIGEST}" ]]; then
+            echo "build digest is empty" >&2
+            exit 1
+          fi
+          echo "ghcr_ref=ghcr.io/brunogaosz/ljwx-chat@${DIGEST}" >> "$GITHUB_OUTPUT"
 
   enqueue:
     if: github.event_name != 'pull_request'
     needs: [build]
-    uses: ./.github/workflows/enqueue-release.yml
-    with:
-      service: ljwx-chat
-      env: ${{ github.event_name == 'workflow_dispatch' && inputs.target_env || 'dev' }}
-      ghcr_ref: ${{ needs.build.outputs.ghcr_ref }}
-      tag: ${{ needs.build.outputs.tag }}
-      source_git_sha: ${{ github.sha }}
-      deploy_repo: BrunoGaoSZ/ljwx-deploy
-      deploy_ref: main
-      queue_file: release/queue.yaml
-      open_pr: true
-      auto_merge_pr: true
-      merge_method: merge
-      pr_title_prefix: queue
-    secrets:
-      deploy_repo_token: ${{ secrets.DEPLOY_REPO_TOKEN }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DEPLOY_REPO: BrunoGaoSZ/ljwx-deploy
+      DEPLOY_REF: main
+      SERVICE: ljwx-chat
+      TARGET_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.target_env || 'dev' }}
+      GHCR_REF: ${{ needs.build.outputs.ghcr_ref }}
+      RELEASE_TAG: ${{ needs.build.outputs.tag }}
+      SOURCE_GIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Validate token
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${{ secrets.DEPLOY_REPO_TOKEN }}" ]]; then
+            echo "DEPLOY_REPO_TOKEN secret is required" >&2
+            exit 1
+          fi
+
+      - name: Install PyYAML
+        shell: bash
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Clone deploy repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${{ secrets.DEPLOY_REPO_TOKEN }}@github.com/${DEPLOY_REPO}.git" deploy-repo
+          git -C deploy-repo checkout "${DEPLOY_REF}"
+
+      - name: Enqueue release entry
+        id: enqueue
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import datetime as dt
+          import os
+          import re
+          from pathlib import Path
+
+          import yaml
+
+          queue_path = Path('deploy-repo/release/queue.yaml')
+          payload = yaml.safe_load(queue_path.read_text(encoding='utf-8')) or {}
+          for key in ('pending', 'promoted', 'failed', 'superseded'):
+            payload.setdefault(key, [])
+
+          ghcr_ref = os.environ['GHCR_REF']
+          m = re.search(r'@(sha256:[0-9a-f]{64})$', ghcr_ref)
+          if not m:
+            raise SystemExit(f'invalid ghcr_ref: {ghcr_ref}')
+
+          now = dt.datetime.now(dt.timezone.utc)
+          queue_id = f"{now.strftime('%Y%m%dT%H%M%SZ')}-{os.environ['SERVICE']}-{os.environ['RELEASE_TAG']}"
+
+          payload['pending'].append({
+              'id': queue_id,
+              'service': os.environ['SERVICE'],
+              'env': os.environ['TARGET_ENV'],
+              'source': {
+                  'ghcr': ghcr_ref,
+                  'tag': os.environ['RELEASE_TAG'],
+                  'digest': m.group(1),
+                  'gitSha': os.environ['SOURCE_GIT_SHA'][:7],
+              },
+              'createdAt': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+              'status': 'pending',
+              'attempts': 0,
+              'lastError': '',
+              'promotedAt': '',
+              'supersededAt': '',
+              'failedAt': '',
+          })
+
+          queue_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding='utf-8')
+          Path('/tmp/queue-id').write_text(queue_id, encoding='utf-8')
+          PY
+
+          echo "queue_id=$(cat /tmp/queue-id)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and open queue PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd deploy-repo
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="bot/queue-${SERVICE}-${GITHUB_RUN_ID}"
+          git checkout -b "${BRANCH}"
+          git add release/queue.yaml
+          git commit -m "queue(${SERVICE}): ${{ steps.enqueue.outputs.queue_id }}"
+          git push origin "${BRANCH}"
+
+          PR_URL="$(gh pr create \
+            --repo "${DEPLOY_REPO}" \
+            --title "queue(${SERVICE}): ${{ steps.enqueue.outputs.queue_id }}" \
+            --body "Automated queue enqueue from ${GITHUB_REPOSITORY}@${GITHUB_SHA::7}" \
+            --base "${DEPLOY_REF}" \
+            --head "${BRANCH}")"
+
+          gh pr merge "${PR_URL}" --repo "${DEPLOY_REPO}" --merge --delete-branch
