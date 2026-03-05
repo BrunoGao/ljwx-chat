@@ -1,0 +1,78 @@
+name: gitops-onboarding-gate
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: "Service key to validate"
+        required: true
+        type: string
+      deploy_repo:
+        description: "Deploy repository owner/name"
+        required: false
+        default: "BrunoGaoSZ/ljwx-deploy"
+        type: string
+      deploy_ref:
+        description: "Deploy repository branch"
+        required: false
+        default: "main"
+        type: string
+      strict:
+        description: "Fail when onboarding gaps are detected"
+        required: false
+        default: true
+        type: boolean
+      service_repo_path:
+        description: "Checkout path for current service repository"
+        required: false
+        default: "service-repo"
+        type: string
+      deploy_repo_path:
+        description: "Checkout path for deploy repository"
+        required: false
+        default: "deploy-repo"
+        type: string
+    secrets:
+      deploy_repo_token:
+        description: "Optional token for deploy repo checkout (recommended for private repos)"
+        required: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout service repository
+        uses: actions/checkout@v4
+        with:
+          path: ${{ inputs.service_repo_path }}
+
+      - name: Checkout deploy repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.deploy_repo }}
+          ref: ${{ inputs.deploy_ref }}
+          path: ${{ inputs.deploy_repo_path }}
+          token: ${{ secrets.deploy_repo_token != '' && secrets.deploy_repo_token || github.token }}
+
+      - name: Run onboarding scan
+        shell: bash
+        env:
+          SERVICE: ${{ inputs.service }}
+          STRICT: ${{ inputs.strict }}
+          SERVICE_REPO_PATH: ${{ inputs.service_repo_path }}
+          DEPLOY_REPO_PATH: ${{ inputs.deploy_repo_path }}
+        run: |
+          set -euo pipefail
+          strict_args=()
+          if [[ "${STRICT}" == "true" ]]; then
+            strict_args+=(--strict)
+          fi
+
+          bash "${DEPLOY_REPO_PATH}/scripts/ops/scan-gitops-context.sh" \
+            --repo "${SERVICE_REPO_PATH}" \
+            --service "${SERVICE}" \
+            --skip-templates-check \
+            "${strict_args[@]}"
+

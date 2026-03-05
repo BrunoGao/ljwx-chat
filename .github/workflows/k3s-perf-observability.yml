@@ -69,7 +69,7 @@ permissions:
 jobs:
   perf-observability:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
-    uses: BrunoGaoSZ/ljwx-workflow-templates/.github/workflows/k3s-perf-observability.yml@main
+    uses: ./.github/workflows/k3s-perf-observability-reusable.yml
     with:
       namespace: ${{ github.event_name == 'workflow_dispatch' && inputs.namespace || 'ljwx-chat' }}
       deployment_name: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_name || 'ljwx-chat' }}

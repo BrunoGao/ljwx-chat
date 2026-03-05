@@ -20,7 +20,7 @@ on:
 jobs:
   gitops_gate:
     if: github.event_name == 'pull_request'
-    uses: BrunoGaoSZ/ljwx-workflow-templates/.github/workflows/gitops-onboarding-gate.yml@main
+    uses: ./.github/workflows/gitops-onboarding-gate.yml
     with:
       service: ljwx-chat
       deploy_repo: BrunoGaoSZ/ljwx-deploy
@@ -38,7 +38,7 @@ jobs:
   build:
     if: github.event_name != 'pull_request'
     needs: [test]
-    uses: BrunoGaoSZ/ljwx-workflow-templates/.github/workflows/build-ghcr.yml@main
+    uses: ./.github/workflows/build-ghcr.yml
     with:
       image_name: brunogaosz/ljwx-chat
       context: .
@@ -50,7 +50,7 @@ jobs:
   enqueue:
     if: github.event_name != 'pull_request'
     needs: [build]
-    uses: BrunoGaoSZ/ljwx-workflow-templates/.github/workflows/enqueue-release.yml@main
+    uses: ./.github/workflows/enqueue-release.yml
     with:
       service: ljwx-chat
       env: ${{ github.event_name == 'workflow_dispatch' && inputs.target_env || 'dev' }}
