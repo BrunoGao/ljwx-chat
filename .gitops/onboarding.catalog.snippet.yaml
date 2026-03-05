@@ -3,7 +3,7 @@
 - service: ljwx-chat
   environment: dev
   overlay_path: apps/ljwx-chat/overlays/ljwx-chat-dev/kustomization.yaml
-  kustomize_image_name: ghcr.io/brunogaosz/ljwx-chat
+  kustomize_image_name: ghcr.io/brunogao/ljwx-chat
   harbor_image: harbor.eu.lingjingwanxiang.cn/app/ljwx-chat
   argocd_app: ljwx-chat-dev
   smoke_endpoint: http://ljwx-chat.ljwx-chat-dev.svc.cluster.local/health

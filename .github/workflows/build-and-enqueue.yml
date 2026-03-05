@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
           SHORT_SHA="${GITHUB_SHA::7}"
           SAFE_BRANCH="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9._-]#-#g')"
-          IMAGE="ghcr.io/brunogaosz/ljwx-chat"
+          IMAGE="ghcr.io/brunogao/ljwx-chat"
           SHA_TAG="sha-${SHORT_SHA}"
           BRANCH_TAG="branch-${SAFE_BRANCH}"
 
@@ -117,7 +117,7 @@ jobs:
             echo "build digest is empty" >&2
             exit 1
           fi
-          echo "ghcr_ref=ghcr.io/brunogaosz/ljwx-chat@${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_ref=ghcr.io/brunogao/ljwx-chat@${DIGEST}" >> "$GITHUB_OUTPUT"
 
   enqueue:
     if: github.event_name != 'pull_request'
