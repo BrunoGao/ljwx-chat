@@ -4,6 +4,7 @@ export const API_ENDPOINTS = {
   oauth: '/api/auth',
 
   proxy: '/webapi/proxy',
+  uploadFile: '/webapi/file/upload',
 
   // plugins
   gateway: '/webapi/plugin/gateway',

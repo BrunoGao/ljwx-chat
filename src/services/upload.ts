@@ -10,6 +10,8 @@ import { API_ENDPOINTS } from '@/services/_url';
 import { FileMetadata, UploadBase64ToS3Result } from '@/types/files';
 import { FileUploadState, FileUploadStatus } from '@/types/files/upload';
 
+import { createHeaderWithAuth } from './_auth';
+
 export const UPLOAD_NETWORK_ERROR = 'NetWorkError';
 
 /**
@@ -54,6 +56,12 @@ interface UploadFileToS3Options {
 }
 
 class UploadService {
+  private calcUploadSpeed = (loadedBytes: number, startTime: number) => {
+    const elapsedSeconds = Math.max((Date.now() - startTime) / 1000, 0.001);
+
+    return loadedBytes / elapsedSeconds;
+  };
+
   /**
    * uniform upload method for both server and client
    */
@@ -149,19 +157,14 @@ class UploadService {
     },
   ): Promise<FileMetadata> => {
     const xhr = new XMLHttpRequest();
-
     const { preSignUrl, ...result } = await this.getSignedUploadUrl(file, { directory, pathname });
-    let startTime = Date.now();
+    const startTime = Date.now();
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable) {
         const progress = Number(((event.loaded / event.total) * 100).toFixed(1));
-
-        const speedInByte = event.loaded / ((Date.now() - startTime) / 1000);
+        const speedInByte = this.calcUploadSpeed(event.loaded, startTime);
 
         onProgress?.('uploading', {
-          // if the progress is 100, it means the file is uploaded
-          // but the server is still processing it
-          // so make it as 99.9 and let users think it's still uploading
           progress: progress === 100 ? 99.9 : progress,
           restTime: (event.total - event.loaded) / speedInByte,
           speed: speedInByte,
@@ -173,25 +176,43 @@ class UploadService {
     xhr.setRequestHeader('Content-Type', file.type);
     const data = await file.arrayBuffer();
 
-    await new Promise((resolve, reject) => {
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          onProgress?.('success', {
-            progress: 100,
-            restTime: 0,
-            speed: file.size / ((Date.now() - startTime) / 1000),
-          });
-          resolve(xhr.response);
-        } else {
-          reject(xhr.statusText);
-        }
+    try {
+      await new Promise((resolve, reject) => {
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            onProgress?.('success', {
+              progress: 100,
+              restTime: 0,
+              speed: this.calcUploadSpeed(file.size, startTime),
+            });
+            resolve(xhr.response);
+          } else {
+            reject(xhr.statusText);
+          }
+        });
+        xhr.addEventListener('error', () => {
+          if (xhr.status === 0) reject(UPLOAD_NETWORK_ERROR);
+          else reject(xhr.statusText);
+        });
+        xhr.send(data);
       });
-      xhr.addEventListener('error', () => {
-        if (xhr.status === 0) reject(UPLOAD_NETWORK_ERROR);
-        else reject(xhr.statusText);
+    } catch (error) {
+      if (error !== UPLOAD_NETWORK_ERROR) throw error;
+
+      onProgress?.('processing', {
+        progress: 99.9,
+        restTime: 0,
+        speed: 0,
       });
-      xhr.send(data);
-    });
+
+      await this.uploadToServerProxy(file, result.path);
+
+      onProgress?.('success', {
+        progress: 100,
+        restTime: 0,
+        speed: this.calcUploadSpeed(file.size, startTime),
+      });
+    }
 
     return result;
   };
@@ -222,6 +243,42 @@ class UploadService {
     const data = await res.arrayBuffer();
 
     return new File([data], filename, { lastModified: Date.now(), type: fileType });
+  };
+
+  private uploadToServerProxy = async (file: File, pathname: string) => {
+    const headers = await createHeaderWithAuth();
+    const formData = new FormData();
+
+    formData.append('file', file);
+    formData.append('pathname', pathname);
+
+    const response = await fetch(API_ENDPOINTS.uploadFile, {
+      body: formData,
+      headers,
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error(await this.getUploadFallbackError(response));
+    }
+  };
+
+  private getUploadFallbackError = async (response: Response) => {
+    const responseText = await response.text();
+
+    if (!responseText) {
+      return response.statusText || `Upload fallback failed (${response.status})`;
+    }
+
+    try {
+      const payload = JSON.parse(responseText) as { error?: string };
+
+      if (payload.error) return payload.error;
+    } catch {
+      return responseText;
+    }
+
+    return responseText;
   };
 
   private getSignedUploadUrl = async (

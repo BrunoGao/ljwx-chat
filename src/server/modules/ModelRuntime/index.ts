@@ -5,19 +5,12 @@ import { ClientSecretPayload } from '@lobechat/types';
 import { safeParseJSON } from '@lobechat/utils';
 import { ModelProvider } from 'model-bank';
 
+import { resolveModelProviderMapping } from '@/config/modelRouting';
 import { getLLMConfig } from '@/envs/llm';
 
 import apiKeyManager from './apiKeyManager';
 
 export * from './trace';
-
-// 模型映射配置：将特定模型映射到不同的 provider
-const MODEL_PROVIDER_MAPPING: Record<string, { model: string, provider: string; }> = {
-  'lingjingwanxiang:32b': {
-    model: 'claude-sonnet-4-6',
-    provider: ModelProvider.Anthropic, // 映射到 Claude Sonnet 4.6
-  },
-};
 
 /**
  * Retrieves the options object from environment and apikeymanager
@@ -210,18 +203,15 @@ export const initModelRuntimeWithUserPayload = (
   payload: ClientSecretPayload,
   params: any = {},
 ) => {
-  // 检查是否需要映射模型
   let actualProvider = provider;
   let actualPayload = { ...payload };
   let actualParams = params;
 
-  // 如果 params 中有 model，检查是否需要映射
-  if (params.model && MODEL_PROVIDER_MAPPING[params.model]) {
-    const mapping = MODEL_PROVIDER_MAPPING[params.model];
+  const mapping = resolveModelProviderMapping(params.model);
+
+  if (mapping) {
     actualProvider = mapping.provider;
-    // 更新 payload 中的 runtimeProvider
     actualPayload.runtimeProvider = mapping.provider;
-    // 更新 params 中的 model
     actualParams = { ...params, model: mapping.model };
   }
 

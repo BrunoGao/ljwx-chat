@@ -11,11 +11,11 @@ import { merge } from 'lodash-es';
 import { ModelProvider } from 'model-bank';
 
 import { enableAuth } from '@/const/auth';
+import { resolveModelProviderMapping } from '@/config/modelRouting';
 import { DEFAULT_AGENT_CONFIG } from '@/const/settings';
 import { isDesktop } from '@/const/version';
 import { getSearchConfig } from '@/helpers/getSearchConfig';
 import { createAgentToolsEngine, createToolsEngine } from '@/helpers/toolEngineering';
-import { MODEL_PROVIDER_MAPPING } from '@/services/_auth';
 import { getAgentStoreState } from '@/store/agent';
 import { agentChatConfigSelectors, agentSelectors } from '@/store/agent/selectors';
 import { aiModelSelectors, aiProviderSelectors, getAiInfraStoreState } from '@/store/aiInfra';
@@ -248,9 +248,9 @@ class ChatService {
     // ===================================================== //
     let model = res.model || DEFAULT_AGENT_CONFIG.model;
 
-    // 检查模型映射：如果模型在映射表中，使用映射的 provider 和 model
-    if (model && MODEL_PROVIDER_MAPPING[model]) {
-      const mapping = MODEL_PROVIDER_MAPPING[model];
+    const mapping = resolveModelProviderMapping(model);
+
+    if (mapping) {
       provider = mapping.provider;
       model = mapping.model;
     }

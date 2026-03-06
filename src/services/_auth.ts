@@ -11,20 +11,13 @@ import {
 import { clientApiKeyManager } from '@lobechat/utils/client';
 import { ModelProvider } from 'model-bank';
 
+import { resolveModelProviderMapping } from '@/config/modelRouting';
 import { aiProviderSelectors, useAiInfraStore } from '@/store/aiInfra';
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
 import { obfuscatePayloadWithXOR } from '@/utils/client/xor-obfuscation';
 
 import { resolveRuntimeProvider } from './chat/helper';
-
-// 模型映射配置：将特定模型映射到不同的 provider
-export const MODEL_PROVIDER_MAPPING: Record<string, { model: string, provider: string; }> = {
-  'lingjingwanxiang:32b': {
-    model: 'claude-sonnet-4-6',
-    provider: ModelProvider.Anthropic, // 映射到 Claude Sonnet 4.6
-  },
-};
 
 export const getProviderAuthPayload = (
   provider: string,
@@ -130,8 +123,9 @@ export const createPayloadWithKeyVaults = (provider: string, model?: string) => 
   let actualProvider = provider;
   let actualModel = model;
 
-  if (model && MODEL_PROVIDER_MAPPING[model]) {
-    const mapping = MODEL_PROVIDER_MAPPING[model];
+  const mapping = resolveModelProviderMapping(model);
+
+  if (mapping) {
     actualProvider = mapping.provider;
     actualModel = mapping.model;
   }

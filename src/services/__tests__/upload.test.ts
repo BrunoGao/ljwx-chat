@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fileEnv } from '@/envs/file';
 import { lambdaClient } from '@/libs/trpc/client';
+import { createHeaderWithAuth } from '@/services/_auth';
 import { API_ENDPOINTS } from '@/services/_url';
 
-import { UPLOAD_NETWORK_ERROR, uploadService } from '../upload';
+import { uploadService } from '../upload';
 
 // Mock dependencies
 vi.mock('@lobechat/const', () => ({
@@ -28,6 +29,10 @@ vi.mock('@/libs/trpc/client', () => ({
       },
     },
   },
+}));
+
+vi.mock('@/services/_auth', () => ({
+  createHeaderWithAuth: vi.fn().mockResolvedValue({ 'X-lobe-chat-auth': 'mock-token' }),
 }));
 
 vi.mock('@/store/electron', () => ({
@@ -63,6 +68,7 @@ describe('UploadService', () => {
     vi.clearAllMocks();
     // Mock Date.now
     vi.spyOn(Date, 'now').mockImplementation(() => 3600000); // 1 hour in milliseconds
+    global.fetch = vi.fn();
   });
 
   describe('uploadFileToS3', () => {
@@ -323,8 +329,14 @@ describe('UploadService', () => {
       );
     });
 
-    it('should handle network error', async () => {
+    it('should fallback to same-origin upload when direct S3 upload hits network error', async () => {
       const xhr = new XMLHttpRequest();
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        }),
+      );
 
       // Simulate network error
       vi.spyOn(xhr, 'addEventListener').mockImplementation((event, handler) => {
@@ -335,7 +347,39 @@ describe('UploadService', () => {
         }
       });
 
-      await expect(uploadService.uploadToServerS3(mockFile, {})).rejects.toBe(UPLOAD_NETWORK_ERROR);
+      const result = await uploadService.uploadToServerS3(mockFile, {});
+
+      expect(result.path).toBe(`${fileEnv.NEXT_PUBLIC_S3_FILE_PATH}/1/mock-uuid.png`);
+      expect(createHeaderWithAuth).toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledWith(
+        API_ENDPOINTS.uploadFile,
+        expect.objectContaining({
+          body: expect.any(FormData),
+          headers: { 'X-lobe-chat-auth': 'mock-token' },
+          method: 'POST',
+        }),
+      );
+    });
+
+    it('should surface fallback upload errors', async () => {
+      const xhr = new XMLHttpRequest();
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({ error: '文件上传失败' }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 500,
+          statusText: 'Internal Server Error',
+        }),
+      );
+
+      vi.spyOn(xhr, 'addEventListener').mockImplementation((event, handler) => {
+        if (event === 'error') {
+          Object.assign(xhr, { status: 0 });
+          // @ts-expect-error - mock implementation
+          handler({});
+        }
+      });
+
+      await expect(uploadService.uploadToServerS3(mockFile, {})).rejects.toThrow('文件上传失败');
     });
 
     it('should handle upload error', async () => {

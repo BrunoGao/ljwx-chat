@@ -464,6 +464,18 @@ describe('initModelRuntimeWithUserPayload method', () => {
       expect(runtime['_runtime'].baseURL).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1');
     });
 
+    it('should route lingjingwanxiang:32b through OpenAI-compatible runtime', async () => {
+      process.env.OPENAI_PROXY_URL = 'https://openclaw.example.com/v1';
+
+      const jwtPayload: ClientSecretPayload = {};
+      const runtime = await initModelRuntimeWithUserPayload(ModelProvider.Ollama, jwtPayload, {
+        model: 'lingjingwanxiang:32b',
+      });
+
+      expect(runtime['_runtime']).toBeInstanceOf(LobeOpenAI);
+      expect(runtime['_runtime'].baseURL).toBe('https://openclaw.example.com/v1');
+    });
+
     it('ComfyUI provider: without user payload (using environment variables)', async () => {
       const jwtPayload: ClientSecretPayload = {};
       const runtime = await initModelRuntimeWithUserPayload(ModelProvider.ComfyUI, jwtPayload);

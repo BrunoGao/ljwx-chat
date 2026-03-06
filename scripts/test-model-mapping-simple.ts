@@ -1,11 +1,11 @@
 /**
- * 简单的模型映射配置测试
+ * Simple model routing smoke test.
  */
 
 const MODEL_PROVIDER_MAPPING: Record<string, { model: string, provider: string; }> = {
   'lingjingwanxiang:32b': {
-    model: 'claude-sonnet-4-6',
-    provider: 'anthropic',
+    model: 'gpt-5.4',
+    provider: 'openai',
   },
 };
 
@@ -26,13 +26,13 @@ if (mapping) {
 }
 
 console.log('\n=== 环境变量检查 ===\n');
-console.log(`ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? '✅ 已设置' : '❌ 未设置'}`);
+console.log(`OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? '✅ 已设置' : '❌ 未设置'}`);
 console.log(
-  `ANTHROPIC_PROXY_URL: ${process.env.ANTHROPIC_PROXY_URL ? `✅ ${process.env.ANTHROPIC_PROXY_URL}` : '❌ 未设置'}`,
+  `OPENAI_PROXY_URL: ${process.env.OPENAI_PROXY_URL ? `✅ ${process.env.OPENAI_PROXY_URL}` : '❌ 未设置'}`,
 );
 
 console.log('\n=== 测试结论 ===\n');
 console.log('配置已完成，当用户在前端选择 lingjingwanxiang:32b 时：');
 console.log('1. 前端显示: lingjingwanxiang:32b');
-console.log('2. 后端实际调用: Anthropic Claude API');
-console.log('3. 使用模型: claude-sonnet-4-6');
+console.log('2. 后端实际调用: OpenAI-compatible OpenClaw Gateway');
+console.log('3. 使用模型: gpt-5.4');
