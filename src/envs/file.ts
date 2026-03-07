@@ -2,6 +2,10 @@ import { createEnv } from '@t3-oss/env-nextjs';
 import { z } from 'zod';
 
 const DEFAULT_S3_FILE_PATH = 'files';
+const BOOLEAN_ENV_TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
+
+const parseBooleanEnv = (value: string | undefined): boolean =>
+  BOOLEAN_ENV_TRUE_VALUES.has(value?.trim().toLowerCase() ?? '');
 
 export const getFileConfig = () => {
   if (!!process.env.NEXT_PUBLIC_S3_DOMAIN) {
@@ -29,7 +33,7 @@ export const getFileConfig = () => {
 
       S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID,
       S3_BUCKET: process.env.S3_BUCKET,
-      S3_ENABLE_PATH_STYLE: process.env.S3_ENABLE_PATH_STYLE === '1',
+      S3_ENABLE_PATH_STYLE: parseBooleanEnv(process.env.S3_ENABLE_PATH_STYLE),
       S3_ENDPOINT: process.env.S3_ENDPOINT,
       S3_PREVIEW_URL_EXPIRE_IN: parseInt(process.env.S3_PREVIEW_URL_EXPIRE_IN || '7200'),
       S3_PUBLIC_DOMAIN,

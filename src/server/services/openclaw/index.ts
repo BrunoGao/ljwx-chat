@@ -207,7 +207,8 @@ export const extractInput = async (messages: OpenAIChatMessage[]): Promise<OpenC
         return fetchAttachment(url);
       }),
     );
-    const attachments = resolvedAttachments.filter(Boolean,
+    const attachments = resolvedAttachments.filter(
+      (attachment): attachment is OpenClawAttachment => attachment !== null,
     );
 
     return { attachments, message: text };
