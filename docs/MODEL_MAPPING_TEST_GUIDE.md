@@ -15,7 +15,7 @@
 
 ```bash
 OPENCLAW_GATEWAY_TOKEN=<openclaw-gateway-token>
-OPENCLAW_GATEWAY_URL=wss://openclaw.lingjingwanxiang.cn/
+OPENCLAW_GATEWAY_URL=https://openclaw.lingjingwanxiang.cn/v1
 OPENCLAW_GATEWAY_ORIGIN=https://openclaw.lingjingwanxiang.cn
 ```
 

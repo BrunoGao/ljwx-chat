@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 const ATTACHMENT_FETCH_TIMEOUT_MS = 15_000;
 const CONNECT_DELAY_MS = 750;
 const DEFAULT_GATEWAY_ORIGIN = 'https://openclaw.lingjingwanxiang.cn';
-const DEFAULT_GATEWAY_URL = 'ws://openclaw.openclaw.svc.cluster.local:18789/';
+const DEFAULT_GATEWAY_URL = 'https://openclaw.lingjingwanxiang.cn/v1';
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
 interface OpenClawAttachment {
