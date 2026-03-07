@@ -5,8 +5,8 @@ import { ClientSecretPayload } from '@lobechat/types';
 import { safeParseJSON } from '@lobechat/utils';
 import { ModelProvider } from 'model-bank';
 
-import { resolveModelProviderMapping } from '@/config/modelRouting';
 import { getLLMConfig } from '@/envs/llm';
+import { resolveLjwxChatModelRoute } from '@/server/services/platformRouting';
 
 import apiKeyManager from './apiKeyManager';
 
@@ -207,7 +207,7 @@ export const initModelRuntimeWithUserPayload = (
   let actualPayload = { ...payload };
   let actualParams = params;
 
-  const mapping = resolveModelProviderMapping(params.model);
+  const mapping = resolveLjwxChatModelRoute(params.model);
 
   if (mapping) {
     actualProvider = mapping.provider;
