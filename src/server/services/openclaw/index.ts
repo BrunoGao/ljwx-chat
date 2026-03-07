@@ -1,5 +1,6 @@
 import { type TracePayload } from '@lobechat/const';
-import { ChatErrorType, type ChatStreamPayload, type OpenAIChatMessage } from '@lobechat/types';
+import { AgentRuntimeErrorType } from '@lobechat/model-runtime';
+import { type ChatStreamPayload, type OpenAIChatMessage } from '@lobechat/types';
 import { createHash, randomUUID } from 'node:crypto';
 
 const ATTACHMENT_FETCH_TIMEOUT_MS = 15_000;
@@ -26,9 +27,9 @@ interface OpenClawInput {
 }
 
 interface OpenClawRequest {
-  tracePayload?: TracePayload;
   payload: ChatStreamPayload;
   signal?: AbortSignal;
+  tracePayload?: TracePayload;
   userId: string;
 }
 
@@ -52,7 +53,7 @@ const createProviderError = (message: string, details?: unknown) => {
   return {
     body: { details, message },
     message,
-    type: ChatErrorType.ProviderBizError,
+    type: AgentRuntimeErrorType.ProviderBizError,
   };
 };
 
@@ -199,15 +200,16 @@ export const extractInput = async (messages: OpenAIChatMessage[]): Promise<OpenC
 
     const text = getTextFromMessage(message);
     const imageUrls = getImageUrlsFromMessage(message);
-    const attachments = (
-      await Promise.all(
-        imageUrls.map((url) => {
-          if (url.startsWith('data:')) return Promise.resolve(dataUrlToAttachment(url));
+    const resolvedAttachments = await Promise.all(
+      imageUrls.map((url) => {
+        if (url.startsWith('data:')) return Promise.resolve(dataUrlToAttachment(url));
 
-          return fetchAttachment(url);
-        }),
-      )
-    ).filter((item): item is OpenClawAttachment => Boolean(item));
+        return fetchAttachment(url);
+      }),
+    );
+    const attachments = resolvedAttachments.filter(
+      (attachment): attachment is OpenClawAttachment => attachment !== null,
+    );
 
     return { attachments, message: text };
   }
@@ -225,9 +227,11 @@ const rejectPendingRequests = (pendingRequests: Map<string, PendingRequest>, err
 };
 
 const createGatewaySocket = (config: OpenClawConfig): WebSocket => {
-  const WebSocketCtor = (globalThis as typeof globalThis & {
-    WebSocket: new (url: string, options?: object) => WebSocket;
-  }).WebSocket;
+  const WebSocketCtor = (
+    globalThis as typeof globalThis & {
+      WebSocket: new (url: string, options?: object) => WebSocket;
+    }
+  ).WebSocket;
 
   return new WebSocketCtor(config.gatewayUrl, {
     headers: { Origin: config.gatewayOrigin },
@@ -261,6 +265,10 @@ export class OpenClawChatService {
     const pendingRequests = new Map<string, PendingRequest>();
 
     const stream = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        if (signal?.aborted) return;
+        abortHandler?.();
+      },
       start: (controller) => {
         const closeStream = () => {
           if (streamClosed) return;
@@ -287,7 +295,11 @@ export class OpenClawChatService {
           closeStream();
         };
 
-        const sendRequest = (method: string, params: object, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) => {
+        const sendRequest = (
+          method: string,
+          params: object,
+          timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+        ) => {
           if (!socket || socket.readyState !== WebSocket.OPEN) {
             return Promise.reject(new Error('OpenClaw gateway 未连接'));
           }
@@ -459,10 +471,6 @@ export class OpenClawChatService {
           if (streamClosed) return;
           emitError('OpenClaw WebSocket 发生错误');
         });
-      },
-      cancel: () => {
-        if (signal?.aborted) return;
-        abortHandler?.();
       },
     });
 
