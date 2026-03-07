@@ -6,7 +6,9 @@ import {
 import { ChatErrorType } from '@lobechat/types';
 
 import { checkAuth } from '@/app/(backend)/middleware/auth';
+import { shouldHandleModelViaOpenClaw } from '@/config/modelRouting';
 import { createTraceOptions, initModelRuntimeWithUserPayload } from '@/server/modules/ModelRuntime';
+import { OpenClawChatService } from '@/server/services/openclaw';
 import { ChatStreamPayload } from '@/types/openai/chat';
 import { createErrorResponse } from '@/utils/errorResponse';
 import { getTracePayload } from '@/utils/trace';
@@ -19,6 +21,18 @@ export const POST = checkAuth(async (req: Request, { params, jwtPayload, createR
   try {
     // ============  1. get request data   ============ //
     const data = (await req.json()) as ChatStreamPayload;
+    const tracePayload = getTracePayload(req);
+
+    if (shouldHandleModelViaOpenClaw(data.model)) {
+      const openClawChatService = new OpenClawChatService();
+
+      return await openClawChatService.streamChat({
+        payload: data,
+        signal: req.signal,
+        tracePayload,
+        userId: jwtPayload.userId,
+      });
+    }
 
     // ============  2. init chat model   ============ //
     let modelRuntime: ModelRuntime;
@@ -32,8 +46,6 @@ export const POST = checkAuth(async (req: Request, { params, jwtPayload, createR
     }
 
     // ============  3. create chat completion   ============ //
-
-    const tracePayload = getTracePayload(req);
 
     let traceOptions = {};
     // If user enable trace

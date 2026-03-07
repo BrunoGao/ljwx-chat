@@ -5,7 +5,7 @@
 实现了透明的模型映射机制：
 
 - **前端显示**: `lingjingwanxiang:32b`
-- **后端实际调用**: OpenAI 兼容的 OpenClaw 网关 (`gpt-5.4`)
+- **后端实际调用**: OpenClaw WebSocket 网关（默认代理到 `gpt-5.4`）
 
 ## 已完成的修改
 
@@ -14,8 +14,9 @@
 **文件**: `.env.local`
 
 ```bash
-OPENAI_API_KEY=<openclaw-gateway-token>
-OPENAI_PROXY_URL=https://openclaw.lingjingwanxiang.cn/v1
+OPENCLAW_GATEWAY_TOKEN=<openclaw-gateway-token>
+OPENCLAW_GATEWAY_URL=wss://openclaw.lingjingwanxiang.cn/
+OPENCLAW_GATEWAY_ORIGIN=https://openclaw.lingjingwanxiang.cn
 ```
 
 ### 2. 模型映射配置
@@ -88,9 +89,9 @@ npm run dev
 
 打开浏览器开发者工具（F12），查看 Network 标签：
 
-1. 找到 `/webapi/chat/ollama` 请求
+1. 找到 `/webapi/chat/openai` 请求
 2. 检查请求 payload 中的 model 字段应为 `lingjingwanxiang:32b`
-3. 实际网关应路由到 OpenClaw
+3. 服务端应切换到 OpenClaw WebSocket 网关
 
 ### 5. 检查日志
 
@@ -109,9 +110,9 @@ lingjingwanxiang:32b
 客户端检测映射 (clientModelRuntime.ts)
     ↓
 传递 runtimeProvider: 'openai'
-传递 runtimeModel: 'gpt-5.4'
+保留可见模型名: 'lingjingwanxiang:32b'
     ↓
-服务端应用映射 (ModelRuntime/index.ts)
+服务端识别 OpenClaw 路由并建立 WebSocket 会话
     ↓
 调用 OpenClaw Gateway
     ↓

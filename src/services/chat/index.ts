@@ -247,12 +247,13 @@ class ChatService {
     // =================== process model =================== //
     // ===================================================== //
     let model = res.model || DEFAULT_AGENT_CONFIG.model;
+    const requestedModel = model;
 
     const mapping = resolveModelProviderMapping(model);
 
     if (mapping) {
       provider = mapping.provider;
-      model = mapping.model;
+      model = mapping.transport === 'openclaw-gateway' ? requestedModel : mapping.model;
     }
 
     // if the provider is Azure, get the deployment name as the request model

@@ -108,11 +108,14 @@ RUN \
     && pnpm init \
     && pnpm add pg drizzle-orm
 
+ARG SOURCE_VERSION=dev
+RUN printf '%s\n' "$SOURCE_VERSION" >/tmp/source-version
 COPY . .
 
-# run build standalone for docker version
-# Skip lint in Docker (already validated locally) to save build time and avoid timeout
-RUN pnpm exec tsx scripts/prebuild.mts && pnpm exec cross-env NODE_OPTIONS=--max-old-space-size=6144 DOCKER=true next build --webpack && npm run build-sitemap
+# Run the standalone production build for container images.
+# Sitemap generation depends on discovery data and is not required for serving the app.
+RUN pnpm exec tsx scripts/prebuild.mts \
+    && pnpm exec cross-env NODE_OPTIONS=--max-old-space-size=6144 DOCKER=true next build --webpack
 
 ## Application image, copy all the files for production
 FROM busybox:latest AS app
